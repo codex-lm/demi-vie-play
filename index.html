@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Demi-Vie — Le socle</title>
+  <title>Demi-Vie</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./src/ui/ui.css">
   <link rel="stylesheet" href="./src/render/integ5.css">
@@ -36,11 +36,11 @@
 </head>
 <body>
   <main id="game-shell" aria-label="Demi-Vie">
-    <canvas id="game-canvas" aria-label="Coupe géologique de l’abri"></canvas>
+    <canvas id="game-canvas" aria-label="Geological cross-section of the shelter" data-aria-label-key="gameCanvasLabel"></canvas>
     <header id="hud"></header>
-    <nav id="build-menu" aria-label="Construction"></nav>
+    <nav id="build-menu" aria-label="Construction" data-aria-label-key="gameConstructionLabel"></nav>
     <aside id="selection-panel"></aside>
-    <section id="journal" aria-label="Journal"></section>
+    <section id="journal" aria-label="Journal" data-aria-label-key="gameJournalLabel"></section>
     <div id="preview-panel" role="status"></div>
     <div id="tooltip" role="tooltip"></div>
     <div id="debug-panel"></div>

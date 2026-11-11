@@ -3,7 +3,7 @@ import { line, poly, ellipse, box, gradient, halo } from '../primitives.js';
 import { drawColonist, colonistFeatures, colonistOutfit } from '../colonist.js';
 import { drawPortrait } from '../portrait.js';
 import { drawFirstSky } from '../first-sky.js';
-import { CINEMA_TEXT as T } from './cinema-strings.fr.js';
+import { cinemaText } from './cinema-strings.fr.js';
 
 export const EXODUS_DURATION = 40;
 export const EXODUS_CUTS = Object.freeze([0, 6, 12, 20, 29, 36, 40]);
@@ -412,7 +412,8 @@ export function createExodusCinematic(options={}) {
     get time() {return time;},
     get duration() {return EXODUS_DURATION;},
     get sequence() {return sequence();},
-    draw(ctx,w,h,{reduceMotion=false}={}) {
+    draw(ctx,w,h,{reduceMotion=false,language=opts.language}={}) {
+      const T=cinemaText(language);
       frame(ctx,0,0,w,h,(c)=>{
         c.fillStyle='#081418';c.fillRect(0,0,w,h);
         const scale=Math.min(w/W,h/H);c.translate((w-W*scale)/2,(h-H*scale)/2);c.scale(scale,scale);

@@ -228,6 +228,7 @@ export class M6Panels {
       this.signature = '';
     }
     if (!this.root) return;
+    if (force) this.signature = '';
     const hiddenByScreen = Boolean(this.game.m6Shell?.titleVisible || this.sim.exodus?.result);
     this.root.hidden = hiddenByScreen;
     if (hiddenByScreen) return;

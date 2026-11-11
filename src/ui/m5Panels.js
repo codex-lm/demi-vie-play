@@ -2,10 +2,10 @@ import { TIME } from '../data/balance.js';
 import { DILEMMAS_FULL as DILEMMAS, dilemmaDefinition } from '../data/dilemmas.js';
 import { dilemmaPreviewText } from '../data/dilemmaPreviewText.js';
 import { ENCOUNTER_CHOICES } from '../data/poi/rules.js';
-import { tr } from '../data/strings.fr.js';
+import { getLanguage, tr } from '../data/strings.fr.js';
 import { calendarDate, excavationDisplayName } from './models.js';
 import { formatDose, formatNumber } from './tooltips.js';
-import { formatJournalEntry } from './journal.js';
+import { formatJournalEntry, formatRadioMessage } from './journal.js';
 import { calendarEventArt, colonistPortraitMarkup, dilemmaArt, iconMarkup, neighborArt, paintM5Illustrations } from '../render/m5Illustrations.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -52,19 +52,13 @@ export function calendarPanel(sim) {
     <table class="m5-calendar" aria-label="${escapeHtml(tr('calendarNext30Days'))}"><thead><tr><th>${escapeHtml(tr('dateShort', { day: 1, hour: 0, minute: 0 }).split('·')[0])}</th><th>${escapeHtml(tr('season'))} · ${escapeHtml(tr('events'))}</th></tr></thead><tbody class="m5-calendar-track">${rows}</tbody></table>`;
 }
 
-function messageText(message) {
-  const params = { ...(message.params ?? {}) };
-  if (params.dose !== undefined) params.dose = formatDose(params.dose);
-  return tr(message.textKey, params);
-}
-
 export function radioPanel(sim) {
   const radio = sim.m5.radio;
   const messages = radio.messages.slice(-8).reverse().map((message) => {
     const expedition = (sim.expeditions?.active ?? []).find((item) => item.id === message.expeditionId);
     const portraits = (expedition?.colonistIds ?? []).filter((id) => sim.colonists.some((person) => person.id === id))
       .map((id) => colonistPortraitMarkup(id, 'm5-radio-portrait')).join('');
-    return `<li><time>${escapeHtml(date(message.tick))}</time><span>${portraits}${escapeHtml(messageText(message))}</span></li>`;
+    return `<li><time>${escapeHtml(date(message.tick))}</time><span>${portraits}${escapeHtml(formatRadioMessage(message))}</span></li>`;
   }).join('');
   const neighbors = radio.neighbors.map((neighbor) => {
     const art = neighborArt(neighbor);
@@ -82,7 +76,7 @@ export function radioPanel(sim) {
 }
 
 function formatResources(resources) {
-  return Object.entries(resources ?? {}).map(([resource, amount]) => `${formatNumber(amount, true)} ${tr(resource).toLocaleLowerCase('fr-FR')}`).join(' · ');
+  return Object.entries(resources ?? {}).map(([resource, amount]) => `${formatNumber(amount, true)} ${tr(resource).toLocaleLowerCase(getLanguage())}`).join(' · ');
 }
 
 function dilemmaDefinitionFor(pending) {
@@ -181,12 +175,21 @@ export class M5Panels {
     if (typeof document !== 'undefined') (document.querySelector('#game-shell') ?? document.body)?.append?.(this.root);
     this.controls = create('div');
     this.controls.className = 'm5-hud-controls';
-    this.controls.innerHTML = `<span class="m5-season">${iconMarkup(this.sim.m5.calendar.season, 'data-m5-season-icon')}<span data-m5-season></span></span><button type="button" data-m5-action="calendar">${tr('calendar')}</button><button type="button" data-m5-action="radio">${tr('radio')}</button><button type="button" data-m5-action="discoveries">${tr('discoveries')}</button><button type="button" data-m5-action="causes">${tr('why')}</button>`;
     this.controls.addEventListener('click', (event) => {
       const button = event.target.closest('[data-m5-action]');
       if (button) this.handleAction(button.dataset.m5Action, button);
     });
-    ui.root?.append?.(this.controls);
+    this.buildControls();
+  }
+
+  buildControls() {
+    this.controls.innerHTML = `<span class="m5-season">${iconMarkup(this.sim.m5.calendar.season, 'data-m5-season-icon')}<span data-m5-season></span></span><button type="button" data-m5-action="calendar">${tr('calendar')}</button><button type="button" data-m5-action="radio">${tr('radio')}</button><button type="button" data-m5-action="discoveries">${tr('discoveries')}</button><button type="button" data-m5-action="causes">${tr('why')}</button>`;
+    this.ui.root?.append?.(this.controls);
+  }
+
+  refreshLanguage() {
+    this.buildControls();
+    if (this.modal) this.renderModal();
   }
 
   open(type, values = {}) {

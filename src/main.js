@@ -1,6 +1,7 @@
 import { Game } from './game.js';
-import { M6Shell } from './ui/m6Shell.js';
+import { applyGameLanguage, loadLanguage, M6Shell } from './ui/m6Shell.js';
 
+applyGameLanguage(loadLanguage());
 const params = new URLSearchParams(location.search);
 const seed = Number.parseInt(params.get('seed') ?? '1', 10) || 1;
 const speed = Number.parseInt(params.get('speed') ?? '1', 10);

@@ -1,16 +1,16 @@
 {
   "title": "Demi-Vie",
-  "description": "Bâtis un abri souterrain après une catastrophe nucléaire. Creuse et consolide des salles, répartis le travail et gère l’air, l’eau, la nourriture et la chaleur de la colonie pour préparer l’Exode.",
+  "description": "Build an underground colony after a nuclear catastrophe. Carve rooms into the rock and reinforce them before they collapse. Assign work, keep the shelter supplied with air, water, food, and heat, and send expeditions to the surface. Keep your people alive long enough to prepare the Exodus.",
   "entrypoint": "index.html",
   "license": "MIT",
-  "genre": ["City builder", "Simulation", "Survie"],
-  "themes": ["Post-apocalyptique", "Souterrain"],
+  "genre": ["City builder", "Simulation", "Survival"],
+  "themes": ["Post-apocalyptic", "Underground"],
   "controls": [
-    "Clic gauche pour sélectionner, cliquer-glisser pour tracer",
-    "Molette pour zoomer",
-    "ZQSD, WASD ou flèches pour déplacer la caméra",
-    "Espace pour mettre en pause, 1 à 5 pour régler la vitesse",
-    "Boutons − et + de l’interface pour ajuster sa taille"
+    "Left-click to select, click and drag to mark out excavations",
+    "Mouse wheel to zoom",
+    "WASD, ZQSD, or arrow keys to move the camera",
+    "Space to pause or resume, 1–5 to change speed",
+    "− and + to change the interface size"
   ],
   "credits": ["Demi-Vie"]
 }

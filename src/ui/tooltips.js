@@ -1,34 +1,39 @@
 import { WORLD } from '../data/balance.js';
 import { DEPOSITS, materialAt } from '../data/materials.js';
-import { tr } from '../data/strings.fr.js';
+import { getLanguage, tr } from '../data/strings.fr.js';
 
-const numberFormatter = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 3 });
-const decimalFormatter = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
-const integerFormatter = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
+const numberFormats = Object.fromEntries(['fr', 'en'].map((language) => {
+  const locale = language === 'en' ? 'en-US' : 'fr-FR';
+  return [language, {
+    precise: new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }),
+    decimal: new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }),
+    integer: new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }),
+  }];
+}));
 
-export function formatNumber(value, integer = false) {
+export function formatNumber(value, integer = false, language = getLanguage()) {
   const number = Number(value);
   if (number === Infinity) return '∞';
   if (number === -Infinity) return '−∞';
-  if (!Number.isFinite(number)) return tr('unknown');
-  return (integer ? integerFormatter : numberFormatter).format(number);
+  if (!Number.isFinite(number)) return tr('unknown', {}, language);
+  return (numberFormats[language] ?? numberFormats.fr)[integer ? 'integer' : 'precise'].format(number);
 }
 
 export function formatTemperature(value) {
   const number = Number(value);
-  return Number.isFinite(number) ? decimalFormatter.format(number) : tr('unknown');
+  return Number.isFinite(number) ? numberFormats[getLanguage()].decimal.format(number) : tr('unknown');
 }
 
-export function formatDose(value) {
+export function formatDose(value, language = getLanguage()) {
   const number = Number(value);
-  if (!Number.isFinite(number)) return tr('unknown');
-  return (Math.abs(number) >= 100 ? integerFormatter : decimalFormatter).format(number);
+  if (!Number.isFinite(number)) return tr('unknown', {}, language);
+  return (numberFormats[language] ?? numberFormats.fr)[Math.abs(number) >= 100 ? 'integer' : 'decimal'].format(number);
 }
 
 export function formatDoseRate(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return tr('unknown');
-  return (Math.abs(number) >= 1 ? decimalFormatter : numberFormatter).format(number);
+  return numberFormats[getLanguage()][Math.abs(number) >= 1 ? 'decimal' : 'precise'].format(number);
 }
 
 function translatedValue(key, value) {

@@ -1,6 +1,7 @@
 export const M6 = Object.freeze({
   SAVE_KEY: 'demi-vie-save-v1',
   OPTIONS_KEY: 'demi-vie-options-v1',
+  LANGUAGE_KEY: 'demi-vie-language',
   CREAK_INTEGRITY: 85,
   SOUVENIR_HERITAGE: 15,
   GEOLOGIST_MIN_SKILL: 1,

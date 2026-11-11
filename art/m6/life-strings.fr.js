@@ -4,3 +4,7 @@ export const LIFE_ART = Object.freeze({
   risks: Object.freeze({green:'Stable',yellow:'À consolider',red:'Danger'}),
   schoolBoard:'Le ciel, un jour',
 });
+
+export function schoolBoardText(language) {
+  return language === 'en' ? 'The sky, one day' : LIFE_ART.schoolBoard;
+}

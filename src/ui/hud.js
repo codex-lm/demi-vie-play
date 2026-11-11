@@ -144,6 +144,7 @@ export class UI {
     this.toastTimer = null;
     this.valueNodes = {};
     this.buildHud();
+    this.root?.addEventListener('click', (event) => this.onHudClick(event));
     this.buildOverlayControls();
     this.m4Panels = new M4Panels(game, this);
     this.buildMenu = new BuildMenu(game, this);
@@ -186,30 +187,31 @@ export class UI {
       detail: RESERVE_DETAILS.has(key) ? this.root.querySelector(`[data-reserve-detail="${key}"]`) : null,
     }]));
     this.alertBanner = this.root.querySelector('[data-alert-banner]');
-    this.root.addEventListener('click', (event) => {
-      const reserveButton = event.target.closest('button[data-reserve]');
-      if (reserveButton) {
-        this.openReserve(reserveButton.dataset.reserve);
-        return;
-      }
-      const alertButton = event.target.closest('button[data-alert-entry]');
-      if (alertButton) {
-        const entryId = Number(alertButton.dataset.alertEntry);
-        const currentAlert = latestAlertModel(this.game.sim)?.entry;
-        const entry = this.game.sim.journal.find((item) => item.id === entryId)
-          ?? (currentAlert?.id === entryId ? currentAlert : null);
-        if (entry?.focus) this.game.focus(entry.focus.x, entry.focus.y);
-        const excavationId = entry?.params?.excavationId ?? entry?.params?.id;
-        if (excavationId !== undefined && this.game.sim.excavation(excavationId)) this.game.select({ type: 'excavation', id: excavationId });
-        return;
-      }
-      const button = event.target.closest('button[data-speed]');
-      if (button) this.game.setSpeed(Number(button.dataset.speed));
-      const colonistButton = event.target.closest('button[data-colonist-id]');
-      if (!colonistButton || colonistButton.disabled) return;
-      const id = Number(colonistButton.dataset.colonistId);
-      if (this.game.sim.colonists.some((colonist) => colonist.id === id)) this.game.select({ type: 'colonist', id });
-    });
+  }
+
+  onHudClick(event) {
+    const reserveButton = event.target.closest('button[data-reserve]');
+    if (reserveButton) {
+      this.openReserve(reserveButton.dataset.reserve);
+      return;
+    }
+    const alertButton = event.target.closest('button[data-alert-entry]');
+    if (alertButton) {
+      const entryId = Number(alertButton.dataset.alertEntry);
+      const currentAlert = latestAlertModel(this.game.sim)?.entry;
+      const entry = this.game.sim.journal.find((item) => item.id === entryId)
+        ?? (currentAlert?.id === entryId ? currentAlert : null);
+      if (entry?.focus) this.game.focus(entry.focus.x, entry.focus.y);
+      const excavationId = entry?.params?.excavationId ?? entry?.params?.id;
+      if (excavationId !== undefined && this.game.sim.excavation(excavationId)) this.game.select({ type: 'excavation', id: excavationId });
+      return;
+    }
+    const button = event.target.closest('button[data-speed]');
+    if (button) this.game.setSpeed(Number(button.dataset.speed));
+    const colonistButton = event.target.closest('button[data-colonist-id]');
+    if (!colonistButton || colonistButton.disabled) return;
+    const id = Number(colonistButton.dataset.colonistId);
+    if (this.game.sim.colonists.some((colonist) => colonist.id === id)) this.game.select({ type: 'colonist', id });
   }
 
   hudClearance() {
@@ -278,6 +280,18 @@ export class UI {
     this.previewPanel?.refresh();
     this.journal?.refresh(true);
     this.refreshOverlay();
+  }
+
+  refreshLanguage() {
+    this.buildHud();
+    this.buildOverlayControls();
+    this.buildMenu?.build();
+    this.buildMenu?.setTab(this.buildMenu.tab);
+    this.m5Panels?.refreshLanguage();
+    this.m4Panels?.renderModal();
+    this.m6Panels?.refresh(true);
+    this.tooltip?.hide();
+    this.refresh();
   }
 
   refreshDynamic() {

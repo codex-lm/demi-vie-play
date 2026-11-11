@@ -2,10 +2,11 @@ import { P, hash, finite, seedOf, frame } from './common.js';
 import { drawTitleScene, drawLogo } from '../title-scene.js';
 import { drawColonist } from '../colonist.js';
 import { halo, line, ellipse } from '../primitives.js';
-import { CINEMA_TEXT as T } from './cinema-strings.fr.js';
+import { cinemaText } from './cinema-strings.fr.js';
 
 /** Slow, layered title tableau; caller owns requestAnimationFrame and menu input. */
-export function createTitleAnimation({seed=6,branding=true}={}) {
+export function createTitleAnimation({seed=6,branding=true,language}={}) {
+  const T=cinemaText(language);
   seed=seedOf(seed);let time=0,background=null;
   if(typeof OffscreenCanvas==='function')background=new OffscreenCanvas(1600,900);
   else if(typeof document!=='undefined'&&document.createElement){background=document.createElement('canvas');background.width=1600;background.height=900;}

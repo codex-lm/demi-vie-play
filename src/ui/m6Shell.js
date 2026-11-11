@@ -1,5 +1,5 @@
 import { DEFAULT_M6_OPTIONS, M6 } from '../data/m6.js';
-import { tr } from '../data/strings.fr.js';
+import { getLanguage, setLanguage, tr } from '../data/strings.fr.js';
 
 export const DEFAULT_OPTIONS = DEFAULT_M6_OPTIONS;
 
@@ -56,6 +56,25 @@ function defaultStorage() {
     return globalThis.localStorage ?? null;
   } catch {
     return null;
+  }
+}
+
+export function loadLanguage(storage = defaultStorage()) {
+  try {
+    return storage?.getItem(M6.LANGUAGE_KEY) === 'fr' ? 'fr' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+export function applyGameLanguage(language) {
+  setLanguage(language);
+  const document = globalThis.document;
+  if (!document?.documentElement) return;
+  document.documentElement.lang = getLanguage();
+  document.title = tr('gameDocumentTitle');
+  for (const element of document.querySelectorAll('[data-aria-label-key]')) {
+    element.setAttribute('aria-label', tr(element.dataset.ariaLabelKey));
   }
 }
 
@@ -141,6 +160,7 @@ export function titleMarkup(model = {}) {
 
 export function optionsMarkup(options = DEFAULT_OPTIONS, width, height) {
   const values = normalizeOptions(options);
+  const language = getLanguage();
   const auto = autoTextScale(width, height);
   const max = maxManualTextScale(width, height);
   const scales = TEXT_SCALES.map((scale) => {
@@ -151,6 +171,10 @@ export function optionsMarkup(options = DEFAULT_OPTIONS, width, height) {
   }).join('');
   return `<section class="m6-options-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(tr('m6OptionsTitle'))}">
     <h2>${escapeHtml(tr('m6OptionsTitle'))}</h2>
+    <label>${escapeHtml(tr('m6Language'))}<select data-m6-option="language">
+      <option value="en" lang="en"${language === 'en' ? ' selected' : ''}>English</option>
+      <option value="fr" lang="fr"${language === 'fr' ? ' selected' : ''}>Français</option>
+    </select></label>
     <label>${escapeHtml(tr('m6TextScale'))}<select data-m6-option="textScale">${scales}</select></label>
     <label class="m6-check"><input type="checkbox" data-m6-option="colorblind" ${values.colorblind ? 'checked' : ''}><span>${escapeHtml(tr('m6Colorblind'))}</span></label>
     <label>${escapeHtml(tr('m6Volume'))}<input type="range" min="0" max="1" step="0.05" value="${values.volume}" data-m6-option="volume"></label>
@@ -414,6 +438,27 @@ export class M6Shell {
 
   handleOption(target) {
     const key = target?.dataset?.m6Option;
+    if (key === 'language') {
+      const language = target.value;
+      if ((language !== 'en' && language !== 'fr') || language === getLanguage()) return false;
+      if (this.titleVisible) this.readSeed();
+      const storage = this.storage === undefined ? defaultStorage() : this.storage;
+      try {
+        storage?.setItem(M6.LANGUAGE_KEY, language);
+      } catch {
+        // Keep the current session usable when the browser denies storage.
+      }
+      applyGameLanguage(language);
+      this.game.audio?.onLanguageChange?.();
+      this.game.ui?.refreshLanguage?.();
+      this.applyOptions();
+      this.titleSignature = '';
+      this.optionsSignature = '';
+      if (this.pauseRoot) this.pauseRoot.innerHTML = '';
+      this.refresh();
+      this.optionsRoot?.querySelector('[data-m6-option="language"]')?.focus();
+      return true;
+    }
     if (!Object.hasOwn(DEFAULT_OPTIONS, key)) return false;
     const value = target.type === 'checkbox' ? target.checked : target.value;
     this.game.options = saveM6Options({ ...this.game.options, [key]: value }, this.storage);

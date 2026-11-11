@@ -1,5 +1,5 @@
 import { FITTABLE_ROOMS } from '../data/rooms.js';
-import { tr } from '../data/strings.fr.js';
+import { getLanguage, tr } from '../data/strings.fr.js';
 import { fittingModel, formatReserveDays, reserveStatusModel, roomProductionModel } from './models.js';
 import { formatNumber } from './tooltips.js';
 import { charterPanel, researchPanel } from './socialPanels.js';
@@ -41,7 +41,7 @@ function roomOptions(selected, sim, excavation) {
     const keys = FITTABLE_ROOMS.filter((key) => {
       const definition = roomProductionModel({ roomType: key }).definition;
       return group.rooms ? group.rooms.includes(key) : definition?.category === group.category;
-    }).sort((a, b) => tr(a).localeCompare(tr(b), 'fr'));
+    }).sort((a, b) => tr(a).localeCompare(tr(b), getLanguage()));
     const entries = keys.map((key) => {
       const model = fittingModel(sim, excavation, key);
       const disabled = Boolean(excavation && !model.ok);

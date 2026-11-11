@@ -1,8 +1,11 @@
 import { TIME } from '../data/balance.js';
+import { POI_TEXT } from '../data/poiText.js';
+import { RADIO_TEXT } from '../data/radioText.js';
 import { WEATHER } from '../data/surface.js';
-import { STR, tr } from '../data/strings.fr.js';
+import { getLanguage, STR, tr } from '../data/strings.fr.js';
 import { calendarDate, excavationDisplayName } from './models.js';
 import { formatDose, formatNumber } from './tooltips.js';
+import { localizeStoryJournalParams } from './storyLocalization.js';
 
 function entryTime(tick) {
   const day = Math.floor(tick / TIME.TICKS_PER_DAY) + 1;
@@ -23,7 +26,7 @@ function resourceSummary(yields) {
       const range = Array.isArray(amount) ? amount : [amount, amount];
       const value = Number(range[0]) === Number(range[1] ?? range[0])
         ? formatNumber(range[0], true) : `${formatNumber(range[0], true)}–${formatNumber(range[1], true)}`;
-      return `${value} ${tr(resource).toLocaleLowerCase('fr-FR')}`;
+      return `${value} ${tr(resource).toLocaleLowerCase(getLanguage())}`;
     })
     .join(tr('resourceListSeparator'));
 }
@@ -36,20 +39,86 @@ const JOURNAL_DEFAULTS = Object.freeze({
   days: 1, amount: 1, resource: 'filters', effects: '', remedy: '', level: 0,
   dose: 0, site: 'supermarket', summary: '—', hours: 12, type: 'antenna', value: 0,
   reason: 'departure', score: 0, count: 1, weather: 'clear', loot: {},
-  poi: 'un lieu', signals: 0, radius: 40, energy: 8, meters: 3, duration: 20,
-  defense: 0, attack: 0, stolen: 0, injuries: 0, weatherLabel: 'Ciel couvert', otherName: '—',
+  signals: 0, radius: 40, energy: 8, meters: 3, duration: 20,
+  defense: 0, attack: 0, stolen: 0, injuries: 0, otherName: '—',
   material: 'timber',
   choice: '—', text: '—', title: '—', source: 'storyteller', from: 0, donePhraseKey: 'm6ObjectiveDigRoomDone',
 });
 
+// Saves retain French labels and completed messages for a deterministic replay.
+// Their underlying keys, or the original templates for older entries, let the UI
+// show the same events in English without modifying the saved state.
+const POI_LABEL_KEYS = new Map(Object.entries(POI_TEXT).map(([key, value]) => [value, key]));
+const RADIO_LABEL_KEYS = new Map(Object.entries(RADIO_TEXT).map(([key, value]) => [value, key]));
+const SITE_LABEL_KEYS = new Map(Object.entries(STR)
+  .filter(([key]) => key.startsWith('site_')).map(([key, value]) => [value, key]));
+const RESOURCE_LABEL_KEYS = new Map(Object.entries(STR).map(([key, value]) => [value, key]));
+
+function localizeSavedLabel(value, keys) {
+  const key = keys.get(value);
+  return key ? tr(key) : value;
+}
+
+function radioLoot(text) {
+  return String(text).split(STR.resourceListSeparator).map((part) => {
+    const amountAndLabel = part.match(/^(\d+) (.+)$/);
+    if (!amountAndLabel) return localizeSavedLabel(part, RESOURCE_LABEL_KEYS);
+    return `${formatNumber(amountAndLabel[1], true)} ${localizeSavedLabel(amountAndLabel[2], RESOURCE_LABEL_KEYS)}`;
+  }).join(tr('resourceListSeparator'));
+}
+
+export function formatRadioMessage(message) {
+  const params = { ...(message.params ?? {}) };
+  if (params.dose !== undefined) params.dose = formatDose(params.dose);
+  if (getLanguage() === 'en') {
+    if (params.siteId) params.site = tr(`site_${params.siteId}`);
+    else if (params.site) params.site = localizeSavedLabel(params.site, SITE_LABEL_KEYS);
+    if (params.neighbor) params.neighbor = localizeSavedLabel(params.neighbor, RADIO_LABEL_KEYS);
+    if (params.loot) params.loot = radioLoot(params.loot);
+  }
+  return tr(message.textKey, params);
+}
+
+function localizeSavedRadioText(text, textKey) {
+  const key = textKey ?? RADIO_LABEL_KEYS.get(text);
+  const template = RADIO_TEXT[key];
+  if (!template) return text;
+  const placeholders = [...template.matchAll(/\{(\w+)\}/g)];
+  if (!placeholders.length) return tr(key);
+  if (typeof text !== 'string') return text;
+  const pattern = template.split(/\{\w+\}/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('(.+?)');
+  const match = text.match(new RegExp(`^${pattern}$`));
+  if (!match) return text;
+  const params = Object.fromEntries(placeholders.map((placeholder, index) => [placeholder[1], match[index + 1]]));
+  return formatRadioMessage({ textKey: key, params });
+}
+
+function localizeSavedJournalParams(entry, params) {
+  if (getLanguage() !== 'en') return;
+  if (entry.code.startsWith('eventRadio')) params.text = localizeSavedRadioText(params.text, params.textKey);
+  if (entry.code === 'eventFind') params.text = localizeSavedLabel(params.text, POI_LABEL_KEYS);
+  if (entry.code === 'eventPoiEncounter') params.summary = localizeSavedLabel(params.summary, POI_LABEL_KEYS);
+  if (entry.code === 'eventEncounter' && typeof params.outcome === 'string') {
+    const outcome = `encounterOutcome${params.outcome[0]?.toUpperCase() ?? ''}${params.outcome.slice(1)}`;
+    if (Object.hasOwn(STR, outcome)) params.summary = tr(outcome);
+  }
+  if (params.poi) params.poi = localizeSavedLabel(params.poi, POI_LABEL_KEYS);
+  if (entry.code.startsWith('alertFilters') && typeof params.plantFrozen === 'boolean') {
+    const elapsedDays = Math.floor((entry.tick ?? 0) / TIME.TICKS_PER_DAY);
+    const plant = !params.plantFrozen ? tr('filtersPlantOpen') : params.thawDay == null
+      ? tr('filtersPlantFrozenNoThaw') : tr('filtersPlantFrozen', { day: params.thawDay, days: Math.max(0, params.thawDay - elapsedDays) });
+    params.remedy = `${params.coalInSubsoil === false ? ` ${tr('filtersNoCoal')}` : ''} ${plant}`;
+  }
+}
+
 function journalParameter(code, key, value, excavations) {
   if (key === 'material') return tr(String(value));
-  if (key === 'roomType') return tr(String(value)).toLocaleLowerCase('fr-FR');
+  if (key === 'roomType') return tr(String(value)).toLocaleLowerCase(getLanguage());
   if (key === 'lawId') return tr(`law_${value}`);
   if (key === 'nodeId') return tr(`research_${value}`);
   if (key === 'behavior' || key === 'faction') return tr(String(value));
   if (key === 'cause') return tr(String(value));
-  if (key === 'resource') return tr(String(value)).toLocaleLowerCase('fr-FR');
+  if (key === 'resource') return tr(String(value)).toLocaleLowerCase(getLanguage());
   if (key === 'site' || key === 'siteId') return tr(`site_${value}`);
   if (key === 'weather' || key === 'type') return tr(String(value));
   if (key === 'loot' || key === 'yields') return resourceSummary(value);
@@ -110,22 +179,24 @@ export function formatJournalEntry(entry, excavations = [], options = {}) {
     && !entry.params?.consequence && !entry.params?.consequences && !entry.params?.deaths) return null;
   if (story && entry.code === 'eventWelcome') return tr('eventWelcomeStory');
   if (entry.code !== 'eventDug') {
-    const params = { ...JOURNAL_DEFAULTS, ...(entry.params ?? {}) };
+    const params = { ...JOURNAL_DEFAULTS, poi: tr('journalUnknownPlace'), weatherLabel: tr('journalOvercast'), ...(entry.params ?? {}) };
     if (entry.code.startsWith('eventWeather')) prepareWeather(entry, params, story);
     if (story && entry.code === 'eventDeath') {
       params.name = entry.params?.name ?? tr('colonistNumber', { id: Number(entry.params?.id ?? 0) + 1 });
       if (!Array.isArray(params.causes) || params.causes.length === 0) params.causes = ['unknownCause'];
     }
-    if (entry.code === 'eventExpeditionReturn' && !entry.params?.summary) {
+    if (entry.code === 'eventExpeditionReturn' && (!entry.params?.summary || (getLanguage() === 'en' && entry.params?.loot))) {
       params.summary = tr('eventExpeditionReturnSummary', {
         loot: resourceSummary(params.loot) || tr('none'),
-        dose: formatDose(params.dose ?? params.averageDose),
+        dose: formatDose(entry.params?.dose ?? params.averageDose ?? params.dose),
       });
     }
     if (entry.code === 'eventLawSigned') params.effects = tr(`law_${params.lawId}_effect`);
     if (entry.code === 'alertMoraleYellow' && entry.params?.cause === 'morale_neglected') {
       params.remedy = ` ${tr('collectiveCareRemedy')}`;
     }
+    localizeSavedJournalParams(entry, params);
+    localizeStoryJournalParams(entry, params, excavations);
     const formatted = Object.fromEntries(Object.entries(params)
       .map(([key, value]) => [key, journalParameter(entry.code, key, value, excavations)]));
     const code = story && Object.hasOwn(STR, `${entry.code}Story`) ? `${entry.code}Story` : entry.code;

@@ -6,11 +6,11 @@ export { OBJECTIVE_ART, SOUVENIR_ART, drawGameSouvenir } from './m6-symbols.js';
 import { drawElderPortrait, drawObjectiveIcon, drawInkCheck } from '../../art/m6/notebook.js';
 import { drawStoryVignette, STORY_KINDS } from '../../art/m6/story.js';
 import { createExodusCinematic } from '../../art/m6/exodus.js';
-import { INTEG5_TEXT as T } from '../../art/m6/integ5-strings.fr.js';
+import { integ5Text } from '../../art/m6/integ5-strings.fr.js';
 import { colonistAppearance } from './portraits.js';
 import { TIME } from '../data/balance.js';
 import { surfaceTemperature } from '../sim/climate.js';
-import { tr } from '../data/strings.fr.js';
+import { getLanguage, tr } from '../data/strings.fr.js';
 import { animateM5Vignettes } from './m5Illustrations.js';
 
 const states = new WeakMap();
@@ -76,9 +76,10 @@ function paintStatic(canvas, game, state) {
   } else if (canvas.matches('.souvenir-icon') || art === 'drawSouvenir') {
     ctx.save(); ctx.translate((width-size)/2, (height-size)/2); drawGameSouvenir(ctx, canvas.dataset.souvenirType, size); ctx.restore();
   } else if (art === 'drawElderPortrait') {
+    const text = integ5Text(state.language);
     drawElderPortrait(ctx, 0, 0, size, state.expression, {seed: 617});
     canvas.dataset.expression = state.expression;
-    canvas.setAttribute('aria-label', `${T.elder}, ${T.expressions[state.expression]}`);
+    canvas.setAttribute('aria-label', `${text.elder}, ${text.expressions[state.expression]}`);
   } else if (art === 'drawObjectiveIcon') {
     drawObjectiveIcon(ctx, OBJECTIVE_ART[canvas.dataset.objectiveId] ?? 'heritage', 0, 0, size);
   } else if (STORY_KINDS.includes(canvas.dataset.storyKind)) {
@@ -118,10 +119,15 @@ function decorate(state, game) {
   for (const canvas of state.canvases) {
     if (canvas !== state.titleCanvas && canvas !== state.skyCanvas) paintStatic(canvas, game, state);
   }
-  if (state.skyCanvas && !state.skyCanvas.parentElement.querySelector('[data-m6-film="replay"]')) {
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'm6-film-replay';
-    button.dataset.m6Film = 'replay'; button.textContent = T.replay;
-    button.addEventListener('click', () => startFilm(state, game)); state.skyCanvas.after(button);
+  if (state.skyCanvas) {
+    const label = integ5Text(state.language).replay;
+    let replay = state.skyCanvas.parentElement.querySelector('[data-m6-film="replay"]');
+    if (!replay) {
+      replay = document.createElement('button'); replay.type = 'button'; replay.className = 'm6-film-replay';
+      replay.dataset.m6Film = 'replay';
+      replay.addEventListener('click', () => startFilm(state, game)); state.skyCanvas.after(replay);
+    }
+    if (replay.textContent !== label) replay.textContent = label;
   }
   state.resize = true;
 }
@@ -140,14 +146,15 @@ function closeFilm(state, skipped = false) {
 function startFilm(state, game) {
   if (!state.skyCanvas || !state.result || state.result.type !== 'exodus') return;
   if (state.cinematic.active) closeFilm(state, true);
+  const text = integ5Text(state.language);
   state.film = createExodusCinematic(state.cast);
   Object.assign(state.cinematic, {active: true, time: 0, sequence: 0, skipped: false});
   const document = state.document, overlay = document.createElement('section');
   overlay.className = 'm6-cinema-layer'; overlay.setAttribute('role', 'dialog');
-  overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', T.film);
+  overlay.setAttribute('aria-modal', 'true'); overlay.setAttribute('aria-label', text.film);
   const canvas = canvasIn(overlay, 'm6-cinema-canvas', 'exodusCinematic', 1280, 720);
   const button = document.createElement('button'); button.type = 'button'; button.className = 'm6-cinema-skip';
-  button.dataset.m6Film = 'skip'; button.textContent = T.skip;
+  button.dataset.m6Film = 'skip'; button.textContent = text.skip;
   button.addEventListener('click', () => closeFilm(state, true));
   overlay.append(canvas, button); document.body.append(overlay);
   state.overlay = overlay; state.filmCanvas = canvas;
@@ -163,7 +170,7 @@ function startFilm(state, game) {
 }
 
 function createState(game, document) {
-  const state = {document, dirty: true, resize: true, canvases: [], last: null, title: null, titleTime: -1,
+  const state = {document, language: getLanguage(), dirty: true, resize: true, canvases: [], last: null, title: null, titleTime: -1,
     sim:game.sim, lastObjective:(game.sim.events ?? []).findLast(e=>e.type==='objectiveDone'), objectivePulse:null,
     expression: elderExpression(game.sim), result: null, film: null, cinematic: {active:false,time:0,duration:40,sequence:0,skipped:false}};
   const Observer = globalThis.MutationObserver;
@@ -215,6 +222,16 @@ export function updateM6Art(game, now = 0) {
   const document = globalThis.document;
   if (!document?.querySelectorAll || !document.createElement || !game.renderer) return;
   const state = states.get(game) ?? createState(game, document);
+  const language = getLanguage();
+  if (state.language !== language) {
+    state.language = language;
+    state.dirty = true;
+    if (state.overlay) {
+      const text = integ5Text(language);
+      state.overlay.setAttribute('aria-label', text.film);
+      state.overlay.querySelector('[data-m6-film="skip"]').textContent = text.skip;
+    }
+  }
   const dt = state.last === null ? 0 : Math.max(0, now - state.last); state.last = now;
   const expression = elderExpression(game.sim);
   if (state.expression !== expression) {
@@ -232,7 +249,7 @@ export function updateM6Art(game, now = 0) {
   animateM5Vignettes(state.vignettes, now, reduce);
   updateObjectivePulse(state,game,now,reduce);
   if (state.titleCanvas && visible(state.titleCanvas)) {
-    state.title ??= createTitleAnimation({seed:game.sim.seed,branding:false});
+    state.title ??= createTitleAnimation({seed:game.sim.seed,branding:false,language});
     if (!reduce) state.title.update(dt);
     if (!reduce || state.resize || state.titleTime < 0) {
       const {ctx,width,height} = fit(state.titleCanvas); if (ctx) state.title.draw(ctx,width,height);
@@ -243,10 +260,10 @@ export function updateM6Art(game, now = 0) {
     if (state.cinematic.active && !document.hidden) state.film.update(Math.min(.25,dt));
     Object.assign(state.cinematic, {time:state.film.time,sequence:state.film.sequence});
     if (state.filmCanvas) {
-      const {ctx,width,height} = fit(state.filmCanvas); if (ctx) state.film.draw(ctx,width,height,{reduceMotion:reduce});
+      const {ctx,width,height} = fit(state.filmCanvas); if (ctx) state.film.draw(ctx,width,height,{reduceMotion:reduce,language});
     }
     if (state.resize || state.cinematic.active) {
-      const {ctx,width,height} = fit(state.skyCanvas); if (ctx) state.film.draw(ctx,width,height,{reduceMotion:reduce});
+      const {ctx,width,height} = fit(state.skyCanvas); if (ctx) state.film.draw(ctx,width,height,{reduceMotion:reduce,language});
       state.skyCanvas.dataset.painted = 'true';
     }
     if (state.cinematic.active && state.film.done) closeFilm(state);

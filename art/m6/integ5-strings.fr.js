@@ -6,3 +6,15 @@ export const INTEG5_TEXT = Object.freeze({
   elder: 'La doyenne de l’abri',
   expressions: Object.freeze({neutral: 'attentive', proud: 'fière', worried: 'inquiète', sad: 'endeuillée', amused: 'souriante'}),
 });
+
+const INTEG5_TEXT_EN = Object.freeze({
+  skip: 'Skip the film',
+  replay: 'Watch The First Sky again',
+  film: 'The First Sky',
+  elder: 'The shelter elder',
+  expressions: Object.freeze({ neutral: 'attentive', proud: 'proud', worried: 'worried', sad: 'grieving', amused: 'smiling' }),
+});
+
+export function integ5Text(language) {
+  return language === 'en' ? INTEG5_TEXT_EN : INTEG5_TEXT;
+}

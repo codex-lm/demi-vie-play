@@ -2,14 +2,15 @@ import { WORLD } from '../data/balance.js';
 import {
   EXODUS, EXPEDITION, RADIATION, SURFACE_SITES, SURFACE_SLOTS, SURFACE_STRUCTURES,
 } from '../data/surface.js';
-import { STR, tr } from '../data/strings.fr.js';
+import { getLanguage, STR, tr } from '../data/strings.fr.js';
+import { RADIO_NEIGHBORS_FULL } from '../data/radio.js';
+import { dilemmaTextKey } from '../data/storytellerText.js';
 import { createColonyExport } from '../sim/exodus.js';
 import { formatJournalEntry } from './journal.js';
 import {
   calendarDate, exodusKitModel, expeditionLootModel, surfaceHudModel,
 } from './models.js';
 import { formatDose, formatDoseRate, formatNumber, formatTemperature } from './tooltips.js';
-import { radioText } from '../data/radioText.js';
 import { endStoryKind } from './m6cStory.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -30,11 +31,11 @@ function costList(cost = {}) {
   return Object.entries(cost).map(([resource, amount]) => `<li><span>${escapeHtml(tr(resource))}</span><strong>${formatNumber(amount, true)}</strong></li>`).join('');
 }
 
-function lootList(loot = {}) {
+function lootList(loot = {}, language = getLanguage()) {
   return expeditionLootModel(loot).map((entry) => {
-    const range = entry.min === entry.max ? formatNumber(entry.min, true)
-      : `${formatNumber(entry.min, true)}–${formatNumber(entry.max, true)}`;
-    return `<li><span>${escapeHtml(tr(entry.resource))}</span><strong>${range}</strong></li>`;
+    const range = entry.min === entry.max ? formatNumber(entry.min, true, language)
+      : `${formatNumber(entry.min, true, language)}–${formatNumber(entry.max, true, language)}`;
+    return `<li><span>${escapeHtml(tr(entry.resource, {}, language))}</span><strong>${range}</strong></li>`;
   }).join('');
 }
 
@@ -66,7 +67,7 @@ function expeditionFrostMessage(preview, language) {
   const frost = preview.frost;
   if (!frost) return '';
   const values = {
-    hours: formatNumber(frost.maxDurationHours, true),
+    hours: formatNumber(frost.maxDurationHours, true, language),
     day: frost.thawDay,
     days: frost.daysRemaining,
     site: tr(`site_${preview.siteId}`, {}, language),
@@ -83,32 +84,33 @@ function expeditionFrostMessage(preview, language) {
   return message;
 }
 
-export function expeditionPreviewPanel(preview, colonists = [], language = 'fr') {
+export function expeditionPreviewPanel(preview, colonists = [], language = getLanguage()) {
   if (!preview) return '';
+  const t = (key, values) => tr(key, values, language);
   const nameFor = (id) => colonists.find((colonist) => colonist.id === id)?.name
-    ?? tr('colonistNumber', { id: id + 1 });
+    ?? t('colonistNumber', { id: id + 1 });
   const crew = preview.colonistIds.map(nameFor).join(', ');
-  const needsRisk = (preview.needsRisk ?? []).map((risk) => `<li data-colonist-id="${escapeHtml(risk.id)}" data-need="${escapeHtml(risk.need)}">${escapeHtml(tr(`expeditionNeedRisk_${risk.need}`, { name: nameFor(risk.id) }))}</li>`).join('');
+  const needsRisk = (preview.needsRisk ?? []).map((risk) => `<li data-colonist-id="${escapeHtml(risk.id)}" data-need="${escapeHtml(risk.need)}">${escapeHtml(t(`expeditionNeedRisk_${risk.need}`, { name: nameFor(risk.id) }))}</li>`).join('');
   const frostMessage = expeditionFrostMessage(preview, language);
   const outOfReach = preview.frost?.siteOutOfReach === true;
-  return `<div class="panel-heading"><div><span class="eyebrow">${escapeHtml(tr('expeditionPreview'))}</span><h2>${escapeHtml(tr(`site_${preview.siteId}`, {}, language))}</h2></div>
-    <button type="button" class="icon-button" data-m4-action="closeModal" aria-label="${escapeHtml(tr('close'))}">×</button></div>
-    <p class="muted">${escapeHtml(tr('expeditionCrew'))} · ${escapeHtml(crew)}</p>
+  return `<div class="panel-heading"><div><span class="eyebrow">${escapeHtml(t('expeditionPreview'))}</span><h2>${escapeHtml(t(`site_${preview.siteId}`))}</h2></div>
+    <button type="button" class="icon-button" data-m4-action="closeModal" aria-label="${escapeHtml(t('close'))}">×</button></div>
+    <p class="muted">${escapeHtml(t('expeditionCrew'))} · ${escapeHtml(crew)}</p>
     <div class="m4-projection">
-      <strong>${escapeHtml(tr('expeditionDose', { value: formatDose(preview.dosePerPerson) }))}</strong>
-      <span>${escapeHtml(tr('expeditionDuration', { value: formatNumber(preview.durationHours, true) }))}</span>
+      <strong>${escapeHtml(t('expeditionDose', { value: formatDose(preview.dosePerPerson, language) }))}</strong>
+      <span>${escapeHtml(t('expeditionDuration', { value: formatNumber(preview.durationHours, true, language) }))}</span>
     </div>
     ${frostMessage ? `<p class="m4-warning m6f-expedition-frost" data-expedition-frost data-site-out-of-reach="${outOfReach}">${escapeHtml(frostMessage)}</p>` : ''}
-    <h3>${escapeHtml(tr('expeditionLoot'))}</h3><ul class="m4-costs loot-list">${lootList(preview.loot)}</ul>
-    <p class="menu-note">${escapeHtml(tr('expeditionCarryCapacity', {
-      value: formatNumber(preview.carryCapacity ?? EXPEDITION.CARRY_UNITS_PER_PERSON * (preview.colonistIds?.length ?? 1), true),
-      count: formatNumber(preview.colonistIds?.length ?? 1, true),
+    <h3>${escapeHtml(t('expeditionLoot'))}</h3><ul class="m4-costs loot-list">${lootList(preview.loot, language)}</ul>
+    <p class="menu-note">${escapeHtml(t('expeditionCarryCapacity', {
+      value: formatNumber(preview.carryCapacity ?? EXPEDITION.CARRY_UNITS_PER_PERSON * (preview.colonistIds?.length ?? 1), true, language),
+      count: formatNumber(preview.colonistIds?.length ?? 1, true, language),
     }))}</p>
-    <h3>${escapeHtml(tr('expeditionRisks'))}</h3><ul class="m4-risks">${(preview.risks ?? []).map((risk) => `<li>${escapeHtml(tr(`risk_${risk}`))}</li>`).join('')}</ul>
+    <h3>${escapeHtml(t('expeditionRisks'))}</h3><ul class="m4-risks">${(preview.risks ?? []).map((risk) => `<li>${escapeHtml(t(`risk_${risk}`))}</li>`).join('')}</ul>
     ${needsRisk ? `<ul class="m4-risks m6e-expedition-needs">${needsRisk}</ul>` : ''}
-    <p class="m4-warning">${escapeHtml(tr('encounterRisk', { value: formatNumber((preview.encounterChance ?? 0) * 100, true) }))}</p>
-    <div class="m4-dialog-actions"><button type="button" data-m4-action="closeModal">${escapeHtml(tr('cancelExpedition'))}</button>
-    <button type="button" class="primary" data-m4-action="expeditionLaunch" ${outOfReach ? `disabled title="${escapeHtml(frostMessage)}"` : ''}>${escapeHtml(tr('expeditionLaunch'))}</button></div>`;
+    <p class="m4-warning">${escapeHtml(t('encounterRisk', { value: formatNumber((preview.encounterChance ?? 0) * 100, true, language) }))}</p>
+    <div class="m4-dialog-actions"><button type="button" data-m4-action="closeModal">${escapeHtml(t('cancelExpedition'))}</button>
+    <button type="button" class="primary" data-m4-action="expeditionLaunch" ${outOfReach ? `disabled title="${escapeHtml(frostMessage)}"` : ''}>${escapeHtml(t('expeditionLaunch'))}</button></div>`;
 }
 
 export function pendingEncounterModel(sim) {
@@ -274,7 +276,23 @@ export function colonyDownloadModel(sim) {
   return { filename: RADIATION.EXPORT_FILE, json: JSON.stringify(exported), exported };
 }
 
+function localizedNeighborList(value) {
+  if (typeof value !== 'string') return value;
+  if (value === 'aucun') return tr('none');
+  return value.split(', ').map((name) => {
+    const neighbor = RADIO_NEIGHBORS_FULL.find(({ nameKey }) => tr(nameKey, {}, 'fr') === name);
+    return neighbor ? tr(neighbor.nameKey) : name;
+  }).join(', ');
+}
+
 function endStoryText(entry, sim) {
+  if (getLanguage() === 'en' && entry.code === 'storyRadioNeighbors') {
+    const { surviving, silent } = entry.params ?? {};
+    return tr(entry.code, { surviving: localizedNeighborList(surviving), silent: localizedNeighborList(silent) });
+  }
+  if (getLanguage() === 'en' && ['labStoryNeighbors', 'labStorySilencedNeighbors'].includes(entry.code)) {
+    return tr(entry.code, { names: localizedNeighborList(entry.params?.names) });
+  }
   if (!entry.code.startsWith('m6Story')) return formatJournalEntry(entry, sim.excavations, { story: true });
   const params = { ...(entry.params ?? {}) };
   if (params.lawId) params.lawId = tr(`law_${params.lawId}`);
@@ -283,14 +301,17 @@ function endStoryText(entry, sim) {
   }
   if (Array.isArray(params.causes)) params.causes = params.causes.map((cause) => translated(cause)).join(', ');
   for (const key of ['savedNameKeys', 'silentNameKeys']) {
-    if (Array.isArray(params[key])) params[key] = params[key].filter(Boolean).map((nameKey) => radioText(nameKey)).join(', ') || tr('none');
+    if (Array.isArray(params[key])) params[key] = params[key].filter(Boolean).map((nameKey) => tr(nameKey)).join(', ') || tr('none');
   }
   if (entry.code === 'm6StoryNeighbors') {
     const savedKey = params.saved === 0 ? 'm6StoryNoNeighborsSaved' : 'm6StoryNeighborsSaved';
     const silentKey = params.silent === 0 ? 'm6StoryNoNeighborsSilent' : 'm6StoryNeighborsSilent';
     return `${tr(savedKey, params)} ${tr(silentKey, params)}`;
   }
-  if (entry.code === 'm6StoryDilemmas') params.name ??= translated(params.definitionId ?? 'unknown');
+  if (entry.code === 'm6StoryDilemmas' && params.name == null) {
+    const titleKey = dilemmaTextKey(params.definitionId, 'title');
+    params.name = Object.hasOwn(STR, titleKey) ? tr(titleKey) : translated(params.definitionId ?? 'unknown');
+  }
   const textKey = entry.code === 'm6StoryDilemmas' && params.count === 1 ? 'm6StoryDilemma' : entry.code;
   return tr(textKey, params);
 }

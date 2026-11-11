@@ -7,8 +7,25 @@ import { M6_TEXT } from './m6Text.js';
 import { M6B_TEXT } from './m6bText.js';
 import { JOURNAL_TEXT_EXTRA } from './proposals/journal-extra.js';
 import { STORY_TEXT_EXTRA } from './proposals/story-extra.js';
+import { BASE_TEXT_EN } from './strings.en.js';
+import { M6_TEXT_EN, M6B_TEXT_EN } from './m6Text.en.js';
+import { HAZARD_TEXT_EN } from './hazardText.en.js';
+import { STORYTELLER_TEXT_EN } from './storytellerText.en.js';
+import { JOURNAL_TEXT_EXTRA_EN } from './proposals/journal-extra.en.js';
+import { STORY_TEXT_EXTRA_EN } from './proposals/story-extra.en.js';
+import { OBJECTIVE_TEXT_EXTRA_EN } from './proposals/objectives-extra.en.js';
+import { UI_TEXT_EN } from './uiText.en.js';
 
 export const STR_EN = Object.freeze({
+  ...BASE_TEXT_EN,
+  ...M6_TEXT_EN,
+  ...M6B_TEXT_EN,
+  ...HAZARD_TEXT_EN,
+  ...STORYTELLER_TEXT_EN,
+  ...JOURNAL_TEXT_EXTRA_EN,
+  ...STORY_TEXT_EXTRA_EN,
+  ...OBJECTIVE_TEXT_EXTRA_EN,
+  ...UI_TEXT_EN,
   expeditionFrostLimit: 'Frost: trips limited to {hours} h. Thaw expected around day {day} (in {days} days).',
   expeditionFrostLimitNoThaw: 'Frost: trips limited to {hours} h. The climate curve has no upcoming thaw.',
   expeditionFrostSiteOutOfReach: 'The requested site, {site}, is out of reach until then: wait for the thaw.',
@@ -51,7 +68,7 @@ export const STR = Object.freeze({
   leadLining: 'Doublage plomb', whitewash: 'Chaux blanche',
   prop: 'Étai / pilier', wood: 'Bois', metal: 'Métal', cement: 'Ciment', concrete: 'Béton',
   door: 'Percer une porte', repair: 'Réparer', repairStone: 'Réparer (1 pierre)', repairNeedsStone: 'Réparer demande 1 pierre. La pierre vient du calcaire, du grès ou du granite, plus bas que l’argile : creusez sous l’abri.', reinforce: 'Renforcer', cancelDig: 'Annuler le creusage',
-  save: 'Sauvegarder', load: 'Charger', exportSave: 'Exporter', importSave: 'Importer',
+  save: 'Sauvegarder', load: 'Charger', export: 'Exporter', import: 'Importer',
   constraints: 'Contraintes', noOverlay: 'Aucun calque', overlays: 'Calques',
   journal: 'Journal de l’abri', selection: 'Sélection', noSelection: 'Cliquez une pièce ou un habitant.',
   integrity: 'Intégrité', stress: 'Contrainte', stable: 'Stable', cracking: 'Fissuration lente',
@@ -496,6 +513,14 @@ export const STR = Object.freeze({
   ...M6B_TEXT,
   ...JOURNAL_TEXT_EXTRA,
   ...STORY_TEXT_EXTRA,
+  journalUnknownPlace: 'un lieu', journalOvercast: 'Ciel couvert',
+  clearingRubble: 'Déblaiement',
+  exportSave: 'Exporter', importSave: 'Importer',
+  m6Language: 'Langue',
+  gameDocumentTitle: 'Demi-Vie — Le socle',
+  gameCanvasLabel: 'Coupe géologique de l’abri',
+  gameConstructionLabel: 'Construction',
+  gameJournalLabel: 'Journal',
 });
 
 export const NAMES = Object.freeze({
@@ -503,8 +528,22 @@ export const NAMES = Object.freeze({
   family: ['Arnaud', 'Bernard', 'Carrel', 'Delaunay', 'Estève', 'Fabre', 'Garnier', 'Hervé', 'Imbert', 'Jourdan', 'Klein', 'Lacombe', 'Marchal', 'Navarro', 'Olivier', 'Perrin', 'Quentin', 'Roche', 'Simon', 'Tessier', 'Valette'],
 });
 
-export function tr(key, values = {}, language = 'fr') {
+let activeLanguage = 'fr';
+
+export function getLanguage() {
+  return activeLanguage;
+}
+
+export function setLanguage(language) {
+  if (language === 'en' || language === 'fr') activeLanguage = language;
+}
+
+export function tr(key, values = {}, language = activeLanguage) {
   let text = (language === 'en' ? STR_EN[key] : undefined) ?? STR[key] ?? key;
   for (const [name, value] of Object.entries(values)) text = text.replaceAll(`{${name}}`, String(value));
   return text;
+}
+
+export function trFrench(key, values) {
+  return tr(key, values, 'fr');
 }

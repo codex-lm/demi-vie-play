@@ -224,6 +224,7 @@ export class SelectionPanel {
       return;
     }
     const model = colonistModel(colonist);
+    const task = colonist.task === 'clearing' ? 'clearingRubble' : colonist.task ?? 'idle';
     const skills = Object.entries(colonist.skills ?? {}).map(([key, value]) => fact(tr(`${key}Skill`), formatNumber(value, true))).join('');
     const carrying = colonist.carrying
       ? `<p class="carrying">${escapeHtml(tr('carryingResource', { value: `${tr(colonist.carrying.resource ?? colonist.carrying.key)} · ${formatNumber(colonist.carrying.amount ?? colonist.carrying.quantity ?? 0, true)}` }))}</p>`
@@ -239,7 +240,7 @@ export class SelectionPanel {
     }).join('');
     const souvenirSection = carriedSouvenirs ? `<section class="m6-carrier-souvenirs"><h3>${escapeHtml(tr('m6Souvenirs'))}</h3>${carriedSouvenirs}</section>` : '';
     this.root.innerHTML = `<div class="panel-heading colonist-heading">${portraitMarkup(colonist)}<div><span class="eyebrow">${escapeHtml(tr('population'))}</span><h2>${escapeHtml(colonist.name)}</h2></div><button type="button" class="icon-button" data-action="close" aria-label="${escapeHtml(tr('closeSelection'))}">×</button></div>
-      <div class="facts">${fact(tr('task'), tr(colonist.task ?? 'idle'))}${age}${model.idleReason ? fact(tr('inactivityReason'), tr(model.idleReason)) : ''}${dose}${injuries}${diseases}</div>
+      <div class="facts">${fact(tr('task'), tr(task))}${age}${model.idleReason ? fact(tr('inactivityReason'), tr(model.idleReason)) : ''}${dose}${injuries}${diseases}</div>
       <section class="dose-effects ${radiation.status}" data-radiation-effects><h3>${escapeHtml(tr('radiationEffects'))}</h3><span class="badge ${radiation.status === 'healthy' ? 'green' : radiation.status === 'high' ? 'yellow' : 'red'}">${escapeHtml(tr(radiation.labelKey))}</span>${radiation.effectKeys.map((key) => `<p>${escapeHtml(tr(key))}</p>`).join('')}</section>
       <h3>${escapeHtml(tr('health'))}</h3>
       ${meter(tr('health'), model.health, model.health <= NEEDS.LOW_NEED_THRESHOLD ? 'red' : model.health <= 100 - NEEDS.LOW_NEED_THRESHOLD ? 'yellow' : 'green')}

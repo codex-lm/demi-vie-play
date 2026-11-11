@@ -1,7 +1,7 @@
 import { EXPEDITION } from '../data/surface.js';
 import { PEOPLE } from '../data/people.js';
 import { HEAT, NEEDS, TIME, WORK } from '../data/balance.js';
-import { tr } from '../data/strings.fr.js';
+import { trFrench as tr } from '../data/strings.fr.js';
 import { surfaceTemperature } from './climate.js';
 import { addDose, surfaceDoseRate, suitProtection } from './radiation.js';
 import { revealSurfaceSites, siteDefinition, siteLootFactor, depleteSite, regenerateSurfaceSites, surfaceHatch } from './surface.js';

@@ -70,6 +70,7 @@ export function createAudio(game, environment = globalThis) {
     get stats() { return synth ? { ...synth.stats, bank: { ...bank.stats, musicId: bank.musicId },
       levels: { master: synth.master.gain.value, music: bank.music.gain.value, proceduralMusic: synth.music.gain.value },
       state: context.state, muted } : { state: 'locked', muted }; },
+    onLanguageChange() { bank?.cancelVoice(); },
     notifyOrderResult(result) {
       if (!orderResultsConnected) { orderResultsConnected = true; observer?.disconnect(); }
       if (result?.ok === false && result.error === 'doorWallTooThin') playOrderRefusal();

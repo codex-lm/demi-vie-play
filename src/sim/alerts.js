@@ -12,7 +12,7 @@ import { consumptionFactor } from './people.js';
 import { usableOssuary } from './lifecycle.js';
 import { siteFrostOutlook } from './expeditions.js';
 import { PEOPLE } from '../data/people.js';
-import { tr } from '../data/strings.fr.js';
+import { trFrench as tr } from '../data/strings.fr.js';
 
 const ROOM_CATEGORIES = ['air', 'cold', 'heat', 'flood'];
 const THERMAL_CATEGORIES = ['cold', 'heat'];

@@ -1,6 +1,7 @@
 import { COLONIST_ACTIONS } from '../../art/m6/actions.js';
 import { drawGeologistSurvey } from '../../art/m6/geologist.js';
 import { drawOssuary, drawSchool } from '../../art/m6/furniture.js';
+import { getLanguage } from '../data/strings.fr.js';
 import { colonistAppearance } from './portraits.js';
 import { colorblindEnabled } from './overlayPalette.js';
 
@@ -98,12 +99,13 @@ export function drawM6Room(ctx, type, box, room, sim) {
   const draw = type === 'school' ? drawSchool : type === 'ossuary' ? drawOssuary : null;
   if (!draw) return false;
   const bodyCount = room.bodyIds?.length ?? sim.colonists?.filter(person => person.ossuaryId === room.id && person.bodyLocation === 'ossuary').length ?? 0;
-  const options = { seed: room.id, t: 0, bodyCount };
+  const language = getLanguage();
+  const options = { seed: room.id, t: 0, bodyCount, language };
   const transform = ctx.getTransform?.();
   const scale = transform ? Math.max(Math.hypot(transform.a, transform.b), Math.hypot(transform.c, transform.d)) : 1;
   const width = Math.min(2048, Math.max(1, Math.ceil(box.width * scale)));
   const height = Math.min(2048, Math.max(1, Math.ceil(box.height * scale)));
-  const key = [type, room.id, bodyCount, width, height].join(':');
+  const key = [type, room.id, bodyCount, width, height, language].join(':');
   let image = roomCache.get(key);
   if (!image) {
     let canvas;

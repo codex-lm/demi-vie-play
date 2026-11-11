@@ -1,6 +1,7 @@
 // Local ElevenLabs bank. Fetch/decode is never awaited by the game loop.
 import { clamp } from './cues.js';
 import { radioText } from '../data/radioText.js';
+import { getLanguage } from '../data/strings.fr.js';
 
 export const BANK_CACHE_BYTES = 64 * 1024 * 1024;
 export const BANK_CONCURRENCY = 2;
@@ -175,16 +176,19 @@ export class AudioBank {
   }
 
   async speak(message) {
-    if (!message || message.kind === 'silence') {
-      if (message?.kind === 'silence') { this.voiceSerial++; this.stop(this.voice); }
-      return;
-    }
+    if (message?.kind === 'silence') this.cancelVoice();
+    if (!message || message.kind === 'silence' || getLanguage() !== 'fr') return;
     const serial = ++this.voiceSerial, epoch = this.epoch, started = this.context.currentTime;
     const entries = await this.manifest(), entry = radioVoiceEntry(entries, message);
     if (!entry) return;
     const sample = await this.request(entry.id);
-    if (!sample || serial !== this.voiceSerial || epoch !== this.epoch || this.disposed || this.muted || this.context.currentTime - started > 8) return;
+    if (!sample || serial !== this.voiceSerial || epoch !== this.epoch || this.disposed || this.muted || getLanguage() !== 'fr' || this.context.currentTime - started > 8) return;
     this.stop(this.voice); this.voice = this.source(sample, { gain: 0.8, radio: true });
+  }
+
+  cancelVoice() {
+    this.voiceSerial++;
+    this.stop(this.voice);
   }
 
   updateMusic(id, options, film) {

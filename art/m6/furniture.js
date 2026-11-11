@@ -1,6 +1,6 @@
 import { box, ellipse, line, poly, gradient, halo } from '../primitives.js';
 import { P, finite, hash, seedOf, frame } from './common.js';
-import { LIFE_ART } from './life-strings.fr.js';
+import { schoolBoardText } from './life-strings.fr.js';
 
 function beam(c,x,y,w,h,seed) {
   box(c,x,y,w,h,gradient(c,x,y,w,h,'#a38158','#584533'),2,P.ink,2);
@@ -124,7 +124,7 @@ export function drawSchool(c,x,y,w,h,options={}) {
     box(ctx,200,39,359,138,gradient(ctx,200,39,0,138,'#243d3a','#31413b'),1,P.woodLight,2);
     // Old chalk wipes remain behind the fresh lesson.
     for(let i=0;i<18;i++)line(ctx,[214+hash(seed,i)*250,50+hash(seed,i+30)*115,244+hash(seed,i)*260,52+hash(seed,i+30)*115],'#c4c8a014',5);
-    ctx.fillStyle='#dbd8b5';ctx.font='italic 20px Georgia, serif';ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillText(LIFE_ART.schoolBoard,225,72);
+    ctx.fillStyle='#dbd8b5';ctx.font='italic 20px Georgia, serif';ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillText(schoolBoardText(opts.language),225,72);
     // Alphabet is geometry rather than a font dependency; seedling lesson below.
     line(ctx,[227,119,238,91,249,119,244,108,232,108],P.cream,2);
     line(ctx,[266,119,266,91,281,93,282,102,267,105,282,107,283,117,266,119],P.cream,2);

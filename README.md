@@ -1,9 +1,9 @@
 # Demi-Vie
 
-Demi-Vie est un jeu de construction et de survie en coupe. Une colonie creuse un abri sous la roche et doit gérer l’air, l’eau, la nourriture et la chaleur pour préparer l’Exode.
+Demi-Vie is a side-view survival city builder. A colony carves a shelter into the rock and manages air, water, food, and heat while preparing for the Exodus.
 
-Le jeu fonctionne dans un navigateur et se lance depuis `index.html` servi en HTTP. La molette règle le zoom de la carte. Les boutons − et + du jeu règlent la taille de l’interface.
+Serve `index.html` over HTTP and open it in a browser. Use the mouse wheel to zoom and the − and + controls to change the interface size. The game starts in English. French is available in Options.
 
-## Code et médias
+## Code and media
 
-Le code et sa documentation sont sous [licence MIT](LICENSE). Les visuels conservent leurs droits propres et sont inclus pour la diffusion de cette édition jouable. Le jeu génère ses bruitages et sa musique dans le navigateur.
+The code and documentation are available under the [MIT License](LICENSE). Artwork is included for distribution with this playable edition and retains its own rights. The game generates sound effects and music in the browser.

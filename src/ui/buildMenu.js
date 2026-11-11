@@ -133,7 +133,7 @@ export class BuildMenu {
     <div class="menu-page surface-page" data-page="surface" hidden><div data-surface-panel></div></div>
     <div class="menu-page social-page" data-page="charter" hidden><div data-charter-panel></div></div>
     <div class="menu-page social-page" data-page="research" hidden><div data-research-panel></div></div>
-    <div class="persistence"><h2>${tr('persistence')}</h2><div><button type="button" data-action="save">${tr('save')}</button><button type="button" data-action="load">${tr('load')}</button><button type="button" data-action="export">${tr('export')}</button><button type="button" data-action="import">${tr('import')}</button></div></div>
+    <div class="persistence"><h2>${tr('persistence')}</h2><div><button type="button" data-action="save">${tr('save')}</button><button type="button" data-action="load">${tr('load')}</button><button type="button" data-action="export-save">${tr('exportSave')}</button><button type="button" data-action="import-save">${tr('importSave')}</button></div></div>
     <button type="button" class="wide select-tool" data-action="select">${tr('selectTool')}</button>`;
   }
 
@@ -198,8 +198,8 @@ export class BuildMenu {
     if (action === 'select') this.game.setTool({ type: 'select' });
     else if (action === 'save') this.game.saveLocal();
     else if (action === 'load') this.game.loadLocal();
-    else if (action === 'export') this.ui.exportSave();
-    else if (action === 'import') this.ui.importSave();
+    else if (action === 'export-save') this.ui.exportSave();
+    else if (action === 'import-save') this.ui.importSave();
     else if (action === 'fit') {
       const selectedExcavation = excavationId === null ? null : this.game.sim.excavation(excavationId);
       const result = this.ui.applyOrder({ type: 'fit', excavationId, roomType: this.roomType });

@@ -51,7 +51,7 @@ export const STR = Object.freeze({
   leadLining: 'Doublage plomb', whitewash: 'Chaux blanche',
   prop: 'Étai / pilier', wood: 'Bois', metal: 'Métal', cement: 'Ciment', concrete: 'Béton',
   door: 'Percer une porte', repair: 'Réparer', repairStone: 'Réparer (1 pierre)', repairNeedsStone: 'Réparer demande 1 pierre. La pierre vient du calcaire, du grès ou du granite, plus bas que l’argile : creusez sous l’abri.', reinforce: 'Renforcer', cancelDig: 'Annuler le creusage',
-  save: 'Sauvegarder', load: 'Charger', export: 'Exporter', import: 'Importer',
+  save: 'Sauvegarder', load: 'Charger', exportSave: 'Exporter', importSave: 'Importer',
   constraints: 'Contraintes', noOverlay: 'Aucun calque', overlays: 'Calques',
   journal: 'Journal de l’abri', selection: 'Sélection', noSelection: 'Cliquez une pièce ou un habitant.',
   integrity: 'Intégrité', stress: 'Contrainte', stable: 'Stable', cracking: 'Fissuration lente',

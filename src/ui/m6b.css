@@ -1,0 +1,111 @@
+.m6b-water-panel {
+  position: absolute;
+  z-index: 8;
+  top: 78px;
+  left: 50%;
+  width: min(720px, calc(100vw - 640px));
+  min-width: 480px;
+  max-height: calc(100% - 160px);
+  padding: 16px;
+  overflow-y: auto;
+  transform: translateX(-50%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(145deg, rgba(22, 35, 39, .98), rgba(13, 22, 25, .98));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .46);
+  pointer-events: auto;
+}
+
+.m6b-water-panel h3 {
+  margin: 16px 0 7px;
+  color: var(--amber-light);
+  font-size: 12px;
+}
+
+.m6b-water-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.m6b-water-summary .fact strong,
+.m6b-water-pending .fact strong {
+  color: #c5e1df;
+}
+
+.m6b-water-pending {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.m6b-water-stations,
+.m6b-water-wells {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.m6b-water-stations > li,
+.m6b-water-wells > li {
+  padding: 9px;
+  border: 1px solid rgba(130, 180, 180, .2);
+  border-radius: 5px;
+  background: rgba(8, 18, 21, .45);
+}
+
+.m6b-water-station-heading,
+.m6b-water-well-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.m6b-water-stations small,
+.m6b-water-wells small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.m6b-water-depletion {
+  color: #e8c78e;
+}
+
+.m6b-water-note {
+  margin-bottom: 0;
+  font-size: 10px;
+}
+
+.m6b-water-hud-detail {
+  display: block;
+  margin-top: 2px;
+  color: #c5e1df;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.m6b-aquifer-hint {
+  margin: 7px 0 0;
+  color: #9fd5d0;
+  font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+  .m6b-water-panel {
+    left: 240px;
+    width: calc(100vw - 552px);
+    min-width: 420px;
+    transform: none;
+  }
+}
+
+/* Aperçu de creusage : ce qu'un étai au milieu changerait. */
+#preview-panel .preview-support { margin: 6px 0 2px; padding: 6px 9px; border-left: 3px solid #93ad9c; color: #e4eadf; background: rgba(98, 129, 110, .14); line-height: 1.4; }
+#preview-panel .preview-support.yellow { border-left-color: #d9b45a; background: rgba(217, 180, 90, .12); }
+#preview-panel .preview-support.red { border-left-color: #d0644f; background: rgba(208, 100, 79, .14); }
+
+/* Panneau d'une salle jaune ou rouge : où poser un étai de plus. */
+.support-advice { margin: 6px 0; padding: 6px 9px; border-left: 3px solid #93ad9c; background: rgba(98, 129, 110, .14); color: #e4eadf; line-height: 1.4; }
+.support-advice.yellow { border-left-color: #d9b45a; background: rgba(217, 180, 90, .12); }
+.support-advice.red { border-left-color: #d0644f; background: rgba(208, 100, 79, .14); }

@@ -1,0 +1,50 @@
+// Source unique des trouvailles supplémentaires, importée par poi/finds.js et poiText.js.
+const find = (id, weight, loot, morale, textKey) => Object.freeze({
+  id, weight, loot: Object.freeze(loot), morale, textKey,
+});
+
+export const FIND_DEFS_EXTRA = Object.freeze([
+  find('labChalkBox', 8, { stone: 1 }, 1, 'labFindChalkBox'),
+  find('labEnamelCup', 8, { metal: 1 }, 1, 'labFindEnamelCup'),
+  find('labSeedEnvelope', 6, { seeds: 1 }, 1, 'labFindSeedEnvelope'),
+  find('labRepairNotebook', 7, { books: 1 }, 1, 'labFindRepairNotebook'),
+  find('labCopperBell', 7, { copperOre: 1 }, 1, 'labFindCopperBell'),
+  find('labDoorHinge', 9, { scrap: 2 }, 0.5, 'labFindDoorHinge'),
+  find('labCleanFlask', 7, { waterClean: 2 }, 0.5, 'labFindCleanFlask'),
+  find('labTinSoldier', 6, { metal: 1 }, 1.5, 'labFindTinSoldier'),
+  find('labRecipeCard', 7, { books: 1 }, 1, 'labFindRecipeCard'),
+  find('labWoodenFrame', 9, { wood: 2 }, 0.5, 'labFindWoodenFrame'),
+  find('labCoalPencil', 8, { coal: 1 }, 1, 'labFindCoalPencil'),
+  find('labSpareFuse', 6, { electronics: 1 }, 0.5, 'labFindSpareFuse'),
+  find('labMarbleBag', 8, { stone: 1 }, 2, 'labFindMarbleBag'),
+  find('labGardenLabel', 7, { books: 1 }, 1, 'labFindGardenLabel'),
+  find('labBicycleChain', 9, { scrap: 2 }, 0.5, 'labFindBicycleChain'),
+  find('labSealedBandage', 5, { meds: 1 }, 1, 'labFindSealedBandage'),
+  find('labClayWhistle', 7, { clayRes: 1 }, 1.5, 'labFindClayWhistle'),
+  find('labPreservedBeans', 6, { food: 2 }, 1, 'labFindPreservedBeans'),
+  find('labPocketDictionary', 7, { books: 1 }, 1, 'labFindPocketDictionary'),
+  find('labBrassKey', 8, { copperOre: 1 }, 0.5, 'labFindBrassKey'),
+]);
+
+export const FIND_TEXT_EXTRA = Object.freeze({
+  labFindChalkBox: 'Une boîte de craies sort de la poussière. On en garde une entière pour écrire les prénoms ; les morceaux rejoignent la pierre à transporter.',
+  labFindEnamelCup: 'Une tasse émaillée porte encore « chef ». Son métal servira. Son titre a déjà changé trois fois de propriétaire.',
+  labFindSeedEnvelope: 'Dans une boîte sèche, une enveloppe contient des graines encore saines. Quelqu’un avait noté : « À semer quand il fera meilleur. »',
+  labFindRepairNotebook: 'Un carnet explique comment réparer une pompe avec presque rien. Les pages grasses rejoignent les livres ; les marges semblent aussi utiles que les plans.',
+  labFindCopperBell: 'Une petite cloche de cuivre tinte contre la pioche. On la sonne une fois avant de la confier aux récupérateurs.',
+  labFindDoorHinge: 'Deux charnières attendent derrière une pierre. La porte a disparu, mais son prochain métier sera peut-être de tenir une étagère.',
+  labFindCleanFlask: 'Une gourde scellée a résisté sous les gravats. L’eau est contrôlée puis mise de côté. Personne ne se moque de sa couleur rose.',
+  labFindTinSoldier: 'Un soldat de métal ressort sans son fusil. Il fait le tour des mains avant la récupération. On lui souhaite une carrière dans la plomberie.',
+  labFindRecipeCard: 'Une fiche de cuisine promet une soupe « pour les jours difficiles ». On la range avec les livres. La catégorie paraît assez large.',
+  labFindWoodenFrame: 'Un cadre vide fournit deux morceaux de bois sec. Pendant la pause, chacun dit ce qu’il aurait mis dedans.',
+  labFindCoalPencil: 'Un bâton de charbon laisse une belle trace sur le mur. Avant de rejoindre le stock, il dessine un soleil légèrement carré.',
+  labFindSpareFuse: 'Un fusible intact dort dans son sachet. La personne qui l’avait gardé « au cas où » aurait apprécié notre atelier.',
+  labFindMarbleBag: 'Un sac de billes de pierre glisse de la paroi. La plus ronde reste près du dortoir le temps d’une partie ; les autres seront transportées.',
+  labFindGardenLabel: 'Des étiquettes de jardin sont attachées à des notes de culture. Elles rejoignent les archives : ici, « plein soleil » demande encore un peu de patience.',
+  labFindBicycleChain: 'Une chaîne rouillée sort en un seul morceau. Deux parts de ferraille attendent les porteurs. Quelqu’un imite discrètement une sonnette.',
+  labFindSealedBandage: 'Un pansement sous emballage intact tombe d’une trousse écrasée. Après contrôle, il rejoint le matériel de soin.',
+  labFindClayWhistle: 'Un sifflet d’argile joue toujours une note. Une seule suffit à rassembler les curieux. Sa matière reste récupérable.',
+  labFindPreservedBeans: 'Deux petites boîtes intactes apparaissent sous une dalle. Leur contenu est contrôlé avant de devenir des vivres. Le menu portera un nom de fête.',
+  labFindPocketDictionary: 'Un dictionnaire de poche connaît encore le mot « plage ». On le range avec les livres, ouvert à une page que personne n’a envie de tourner.',
+  labFindBrassKey: 'Une clé de laiton n’ouvre plus aucune porte connue. Son cuivre, lui, a encore une destination.',
+});

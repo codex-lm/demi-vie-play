@@ -1,0 +1,5 @@
+/* Placement needs an unobstructed floor and cost label. The selected-room
+   panel remains available; the generic terrain tooltip resumes on tool exit. */
+#game-canvas[data-tool="support"] ~ #tooltip {
+  visibility: hidden;
+}

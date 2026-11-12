@@ -11,7 +11,7 @@ import { REPAIRS } from '../data/repairs.js';
 import { EXODUS } from '../data/surface.js';
 import { recipeDefinition } from '../data/recipes.js';
 import { digCell, finishIfDug, remainingCells } from './excavation.js';
-import { excavationReachable, findPath, isWalkable, isWalkableIn, navigationComponent, navigationTargets, pathCost, rebuildNav } from './nav.js';
+import { excavationReachable, findPath, isWalkableIn, navigationComponent, navigationTargets, pathCost, rebuildNav } from './nav.js';
 import { completeFitting } from './rooms.js';
 import { addToStock, createStock, ensureRoomStock, hasResources, isExodusStockReserved, nearestStock, reserveStock, roomStock, spendResources, stockConsumesResource, stockNavigationTargets, stockReachable, stocksConnected } from './resources.js';
 import { isEligibleForWork } from './lifecycle.js';
@@ -1865,41 +1865,42 @@ export function cancelJobsFor(sim, excavation) {
 }
 
 function exposedDigCell(sim, x, y) {
-  return [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]
-    .some(([xx, yy]) => sim.world.isEmpty(xx, yy));
+  return sim.world.isEmpty(x - 1, y) || sim.world.isEmpty(x + 1, y)
+    || sim.world.isEmpty(x, y - 1) || sim.world.isEmpty(x, y + 1);
 }
 
-function clearReach(sim, fromX, fromY, x, y, horizontalFirst, plannedCells) {
-  const intermediate = [];
-  const horizontal = (yy) => {
-    for (let xx = fromX + Math.sign(x - fromX); xx !== x; xx += Math.sign(x - fromX)) intermediate.push([xx, yy]);
-  };
-  const vertical = (xx) => {
-    for (let yy = fromY + Math.sign(y - fromY); yy !== y; yy += Math.sign(y - fromY)) intermediate.push([xx, yy]);
-  };
-  if (horizontalFirst) {
-    horizontal(fromY);
-    vertical(x);
-  } else {
-    vertical(fromX);
-    horizontal(y);
+function clearReach(world, fromX, fromY, x, y, horizontalFirst, plannedCells) {
+  const row = horizontalFirst ? fromY : y;
+  const column = horizontalFirst ? x : fromX;
+  const dx = Math.sign(x - fromX);
+  const dy = Math.sign(y - fromY);
+  for (let xx = fromX + dx; xx !== x; xx += dx) {
+    if (!world.isEmpty(xx, row) && !plannedCells.has(world.index(xx, row))) return false;
   }
-  return intermediate.every(([xx, yy]) => sim.world.isEmpty(xx, yy) || plannedCells.has(sim.world.index(xx, yy)));
+  for (let yy = fromY + dy; yy !== y; yy += dy) {
+    if (!world.isEmpty(column, yy) && !plannedCells.has(world.index(column, yy))) return false;
+  }
+  return true;
 }
 
-function openDigReach(sim, fromX, fromY, x, y, range, plannedCells) {
-  if (Math.abs(fromX - x) + Math.abs(fromY - y) > range || !exposedDigCell(sim, x, y)) return false;
-  return clearReach(sim, fromX, fromY, x, y, true, plannedCells) || clearReach(sim, fromX, fromY, x, y, false, plannedCells);
+function openDigReach(world, fromX, fromY, x, y, plannedCells) {
+  return clearReach(world, fromX, fromY, x, y, true, plannedCells)
+    || clearReach(world, fromX, fromY, x, y, false, plannedCells);
 }
 
 function digTargets(sim, excavation, colonist, x, y) {
+  if (!exposedDigCell(sim, x, y)) return [];
   const range = excavation.h + 1;
   const plannedCells = new Set(excavation.cells);
   const targets = [];
   const nav = rebuildNav(sim);
-  for (let yy = y - range; yy <= y + range; yy += 1) {
-    for (let xx = x - range; xx <= x + range; xx += 1) {
-      if (!openDigReach(sim, xx, yy, x, y, range, plannedCells) || !isWalkableIn(sim.world, nav, xx, yy)
+  const world = sim.world;
+  // A tall shaft has a large reach. Only check tool paths from places where a
+  // miner can actually stand, within the same Manhattan distance as before.
+  for (let yy = Math.max(0, y - range); yy <= Math.min(world.height - 1, y + range); yy += 1) {
+    const width = range - Math.abs(yy - y);
+    for (let xx = Math.max(0, x - width); xx <= Math.min(world.width - 1, x + width); xx += 1) {
+      if (!nav.walkable[world.index(xx, yy)] || !openDigReach(world, xx, yy, x, y, plannedCells)
         || overDrop(sim, excavation, x, y, xx, yy, nav, colonist) || standCutOff(sim, excavation, x, y, xx, yy, nav)) continue;
       targets.push({ x: xx, y: yy, distance: Math.abs(xx - colonist.x) + Math.abs(yy - colonist.y), index: sim.world.index(xx, yy) });
     }
@@ -1909,11 +1910,13 @@ function digTargets(sim, excavation, colonist, x, y) {
 }
 
 function canWorkCell(sim, colonist, excavation, x, y) {
+  if (!exposedDigCell(sim, x, y)) return false;
   const currentX = Math.round(colonist.x);
   const currentY = Math.round(colonist.y);
   const plannedCells = new Set(excavation.cells);
   const nav = rebuildNav(sim);
-  if (openDigReach(sim, currentX, currentY, x, y, excavation.h + 1, plannedCells) && isWalkable(sim, currentX, currentY)
+  if (Math.abs(currentX - x) + Math.abs(currentY - y) <= excavation.h + 1 && isWalkableIn(sim.world, nav, currentX, currentY)
+    && openDigReach(sim.world, currentX, currentY, x, y, plannedCells)
     && !overDrop(sim, excavation, x, y, currentX, currentY, nav, colonist)
     && !standCutOff(sim, excavation, x, y, currentX, currentY, nav)) return true;
   return findPath(sim, colonist, digTargets(sim, excavation, colonist, x, y), undefined, undefined,

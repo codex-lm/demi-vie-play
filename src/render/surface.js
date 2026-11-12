@@ -49,8 +49,11 @@ export function drawSurface(ctx, rect, cellPx, opts) {
     left: -margin, showHotspots: rect.showHotspots, selectedX: rect.selectedX,
     hotspotColors: rect.colorblind ? CIVIDIS : null,
   };
+  const rasterCell = rect.rasterCell ?? cellPx;
+  const landscape = { width: (WORLD.WIDTH + margin * 2) * rasterCell, height: (WORLD.SKY_HEIGHT + 2) * rasterCell,
+    horizon: WORLD.SKY_HEIGHT * rasterCell, cell: rasterCell };
   ctx.save(); ctx.beginPath(); ctx.rect(rect.x ?? 0, rect.y ?? 0, width, height); ctx.clip();
-  drawArtSurface(ctx, stage, cellPx, { ...opts, skyColors });
+  drawArtSurface(ctx, stage, cellPx, { ...opts, skyColors, landscape });
   ctx.restore();
 }
 

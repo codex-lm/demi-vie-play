@@ -8,12 +8,13 @@ const TILE_CELLS = 8;
 const textureCache = new Map();
 const fogCache = new Map();
 const fallbackTiles = new WeakSet();
-const palette = Object.freeze({
+export const STRATA_COLORS = Object.freeze({
   air:[24,37,40], topsoil:[49,41,33], clay:[66,47,41], sand:[72,63,43],
   limestone:[51,53,47], coal:[27,30,31], sandstone:[65,51,38],
   schist:[43,49,48], granite:[47,50,53], rubble:[46,43,37],
   concrete:[68,79,78], bedrock:[32,47,59],
 });
+const palette = STRATA_COLORS;
 const names = Object.freeze([...MATERIAL_IDS, 'schist']);
 const mod = (n,m) => ((n % m) + m) % m;
 const smooth = v => v*v*(3-2*v);
@@ -183,12 +184,15 @@ function mineralEdges(c,material,seed,cellPx) {
   }
 }
 
-function paintTile(c,material,pixels,seed,fog=false) {
+function* paintTile(c,material,pixels,seed,fog=false) {
   if(typeof c.createImageData==='function'&&typeof c.putImageData==='function') {
     const image=c.createImageData(pixels,pixels);
-    for(let y=0;y<pixels;y++)for(let x=0;x<pixels;x++) {
-      const rgb=pigment(material,(x+.5)/pixels,(y+.5)/pixels,seed,fog,.85,pixels),i=(y*pixels+x)*4;
-      image.data[i]=rgb[0];image.data[i+1]=rgb[1];image.data[i+2]=rgb[2];image.data[i+3]=255;
+    for(let y=0;y<pixels;y++) {
+      for(let x=0;x<pixels;x++) {
+        const rgb=pigment(material,(x+.5)/pixels,(y+.5)/pixels,seed,fog,.85,pixels),i=(y*pixels+x)*4;
+        image.data[i]=rgb[0];image.data[i+1]=rgb[1];image.data[i+2]=rgb[2];image.data[i+3]=255;
+      }
+      if ((y & 3) === 3) yield;
     }
     c.putImageData(image,0,0);
   }else {
@@ -200,18 +204,27 @@ function paintTile(c,material,pixels,seed,fog=false) {
 /** Cached by size and seed. Browser values are CanvasImageSources. In Node,
  * values are frozen fallback descriptors, understood by drawTerrainCell. */
 export function makeStrataTextures(cellPx,seed=1) {
+  const steps = strataTextureSteps(cellPx, seed);
+  let step;
+  do { step = steps.next(); } while (!step.done);
+  return step.value;
+}
+
+// The main thread can yield between scanlines when a portal blocks workers.
+export function* strataTextureSteps(cellPx,seed=1) {
   const cell=Math.max(.25,finite(cellPx,20)),salt=finite(seed,1)|0,key=`${cell}:${salt}`;
   if(textureCache.has(key))return textureCache.get(key);
   const pixels=Math.max(16,Math.ceil(cell*TILE_CELLS));
   const tiles={},fogTiles={};
   for(const material of names)for(const fog of [false,true]) {
     const size=fog?32:pixels,canvas=surface(size,size);
-    if(canvas)paintTile(canvas.getContext('2d'),material,size,salt,fog);
+    if(canvas)yield* paintTile(canvas.getContext('2d'),material,size,salt,fog);
     const tile=canvas??Object.freeze({width:size,height:size,material,seed:salt,fog});
     if(!canvas)fallbackTiles.add(tile);
     (fog?fogTiles:tiles)[material]=tile;
+    yield;
   }
-  return remember(textureCache,key,Object.freeze({cellPx:cell,seed:salt,tileCells:TILE_CELLS,tiles:Object.freeze(tiles),fogTiles:Object.freeze(fogTiles)}),3);
+  return remember(textureCache,key,Object.freeze({cellPx:cell,seed:salt,tileCells:TILE_CELLS,tiles:Object.freeze(tiles),fogTiles:Object.freeze(fogTiles)}),cell > 64 ? 1 : 3);
 }
 
 function fallbackTexture(c,material,wx,wy,seed,fog=false) {

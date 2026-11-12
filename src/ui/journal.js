@@ -146,6 +146,8 @@ function journalParameter(code, key, value, excavations) {
     if (value === null && (code.startsWith('alertFlood') || code === 'alertSuddenImmersionRed')) return tr('floodNaturalCavity');
     const id = Number(value);
     if (!Number.isInteger(id)) return value;
+    // The planning entry only stores an ID. Once undone, its kind is unknown.
+    if (code === 'eventPlanned' && !excavations.some((excavation) => excavation.id === id)) return `#${id + 1}`;
     return code === 'eventDeath' ? String(id + 1) : excavationDisplayName(excavations, id);
   }
   return value;

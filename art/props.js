@@ -127,7 +127,7 @@ function roomCeiling(c,w,h,o) {
   }
   for(let x=Math.min(1.2,w/2);x<w-.20;x+=3.1)drawLamp(c,x,.05,1,{lit:o.lit,powered:o.powered||o.independentLight,halo:false});
 }
-function cachedRoomLayers(c,type,w,h,cellPx,o,enabled) {
+function cachedRoomLayers(c,type,w,h,cellPx,o,enabled,rasterTransform) {
   // Flattening several translucent primitives is equivalent only with ordinary
   // source-over painting at full caller alpha. Preserve all other Canvas uses
   // through the original path, including the DOM-free Node contract tests.
@@ -139,7 +139,10 @@ function cachedRoomLayers(c,type,w,h,cellPx,o,enabled) {
       !transparentShadow||c.shadowBlur||c.shadowOffsetX||c.shadowOffsetY||c.getLineDash().length) {
     roomLayerStats.bypasses++;return null;
   }
-  const m=c.getTransform(),sx=Math.hypot(m.a,m.b),sy=Math.hypot(m.c,m.d);
+  // With a fixed raster resolution the transform was captured before scaling
+  // by the animated cell size. Other callers already draw in world units.
+  const m=rasterTransform??c.getTransform(),rasterScale=rasterTransform?cellPx:1;
+  const sx=Math.hypot(m.a,m.b)*rasterScale,sy=Math.hypot(m.c,m.d)*rasterScale;
   const frozen=staticFurniture(type,o),kitchen=type==='kitchen'&&!frozen;
   const furniture=frozen||kitchen;
   const pw=Math.ceil(w*sx),ph=Math.ceil(h*sy),bytes=pw*ph*(frozen?4:8);
@@ -266,9 +269,10 @@ function water(c,w,h,o,foreground=false) {
 /** Furnish an interior rect in pixels; it is clipped, no simulation state is touched. */
 export function drawRoomProps(c,roomType,rect,cellPx,opts={}) {
   if(!c||!Number.isFinite(cellPx)||cellPx<=0||!rect||rect.w<=0||rect.h<=0)return;
-  const o=options(opts),w=rect.w/cellPx,h=rect.h/cellPx;
+  const o=options(opts),w=opts.widthCells??rect.w/cellPx,h=opts.heightCells??rect.h/cellPx;
+  const rasterTransform=opts.rasterCell?c.getTransform?.():null;
   c.save();c.beginPath();c.rect(rect.x,rect.y,rect.w,rect.h);c.clip();c.translate(rect.x,rect.y);c.scale(cellPx,cellPx);
-  const cached=cachedRoomLayers(c,roomType,w,h,cellPx,o,opts.cache!==false);
+  const cached=cachedRoomLayers(c,roomType,w,h,opts.rasterCell??cellPx,o,opts.cache!==false,rasterTransform);
   if(cached) {
     c.drawImage(cached.back,0,0,w,h);
     // The floor stroke is the final state inherited by the furniture drawer.

@@ -53,6 +53,9 @@ export class Renderer {
     ctx.fillStyle = '#101315';
     ctx.fillRect(0, 0, this.width, this.height);
     const view = game.camera.view(now);
+    // Keep static illustrations at the destination resolution throughout a
+    // wheel gesture. Their on-screen size still follows the smoothed camera.
+    view.rasterCell = game.camera.cellSize?.(game.camera.targetZoom) ?? view.cellSize;
     // A paused scenario/save displays current positions, not a stale previous
     // tick (notably the M6 teacher explicitly placed in the school). A game
     // paused in mid-tick keeps the share of the tick it was showing.
@@ -64,7 +67,7 @@ export class Renderer {
     ctx.translate(shake.x, shake.y);
     const horizon = view.sy(WORLD.SURFACE_Y);
     const rect = {
-      x: 0, y: 0, width: this.width, height: this.height, horizon, left: view.left,
+      x: 0, y: 0, width: this.width, height: this.height, horizon, left: view.left, rasterCell: view.rasterCell,
       showHotspots: game.overlay === 'radiation', selectedX: game.sim.radiation?.selectedX,
       colorblind: colorblindEnabled(game),
     };

@@ -105,6 +105,7 @@ export class BuildMenu {
       <button type="button" data-tab="charter" role="tab">${tr('charter')}</button>
       <button type="button" data-tab="research" role="tab">${tr('research')}</button>
     </div>
+    <button type="button" class="wide undo-dig" data-action="undo-dig" aria-keyshortcuts="Control+Z Meta+Z" disabled><span aria-hidden="true">↶</span> ${escapeHtml(tr('undoDig'))}</button>
     <div class="menu-page" data-page="dig">
       <div class="tool-grid">${KINDS.map((kind) => `<button type="button" data-kind="${kind}" title="${escapeHtml(tr(`${kind}Hint`))}"><span class="tool-mark ${kind}" aria-hidden="true"></span><span>${escapeHtml(tr(kind))}</span></button>`).join('')}</div>
       <p class="tool-hint" data-kind-hint>${tr('roomHint')}</p>
@@ -135,6 +136,46 @@ export class BuildMenu {
     <div class="menu-page social-page" data-page="research" hidden><div data-research-panel></div></div>
     <div class="persistence"><h2>${tr('persistence')}</h2><div><button type="button" data-action="save">${tr('save')}</button><button type="button" data-action="load">${tr('load')}</button><button type="button" data-action="export-save">${tr('exportSave')}</button><button type="button" data-action="import-save">${tr('importSave')}</button></div></div>
     <button type="button" class="wide select-tool" data-action="select">${tr('selectTool')}</button>`;
+    this.undoButton = this.root.querySelector('[data-action="undo-dig"]');
+    this.undoTarget = undefined;
+    this.refreshUndo();
+  }
+
+  latestDig() {
+    if (this.game.sim.exodus?.result) return null;
+    // Excavations are appended in order and retained in saves. Automatic rescue
+    // tunnels and fragments created by a collapse have no player order to undo.
+    return this.game.sim.excavations?.findLast((excavation) =>
+      !excavation.initial && excavation.rescueSourceId == null && excavation.fragmentOf == null
+      && (excavation.state === 'planned' || excavation.state === 'digging')) ?? null;
+  }
+
+  refreshUndo() {
+    if (!this.undoButton) return;
+    const target = this.latestDig();
+    if (target === this.undoTarget) return;
+    this.undoButton.disabled = !target;
+    this.undoButton.title = target
+      ? tr('undoDigHelp', { kind: tr(target.kind), x: target.x, y: target.y })
+      : tr('undoDigEmpty');
+    this.undoTarget = target;
+  }
+
+  undoLastDig() {
+    const target = this.latestDig();
+    // Work can finish between seeing the button and clicking it. Never cancel
+    // an older drawing in place of the one the control was offering.
+    if (!target || target !== this.undoTarget) {
+      const message = this.undoTarget ? 'undoDigUnavailable' : 'undoDigEmpty';
+      this.refreshUndo();
+      this.ui.toast(message);
+      return false;
+    }
+    const result = this.game.apply({ type: 'cancel', excavationId: target.id });
+    if (result.ok && this.game.selection?.type === 'excavation' && this.game.selection.id === target.id
+      && !this.game.sim.excavation(target.id)) this.game.select(null);
+    this.ui.toast(result.ok ? (target.dugCells.length ? 'undoDigPartial' : 'undoDigDone') : 'actionFailed');
+    return result.ok;
   }
 
   setTab(tab) {
@@ -185,6 +226,10 @@ export class BuildMenu {
     const button = event.target.closest('[data-action]');
     if (!button) return;
     const action = button.dataset.action;
+    if (action === 'undo-dig') {
+      this.undoLastDig();
+      return;
+    }
     if (action === 'law' || action === 'research') {
       const order = action === 'law'
         ? { type: 'law', lawId: button.dataset.lawId }

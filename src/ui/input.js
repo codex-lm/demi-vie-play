@@ -379,6 +379,20 @@ export class InputController {
       this.game.m6Shell.opening.onKeyDown(event);
       return;
     }
+    if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === 'z') {
+      const shell = this.game.m6Shell;
+      const ui = this.game.ui;
+      if (event.defaultPrevented || event.shiftKey || event.altKey
+        || event.target?.isContentEditable || event.target?.closest?.('input, textarea, select')
+        || shell?.titleVisible || shell?.pauseVisible || shell?.optionsVisible
+        || ui.m4Panels?.modal || ui.m5Panels?.modal || ui.m6Panels?.modal || ui.tokenBoard?.opened) return;
+      event.preventDefault();
+      if (!event.repeat) {
+        if (this.drawing) this.cancel();
+        else ui.buildMenu?.undoLastDig();
+      }
+      return;
+    }
     if (PAN_KEYS.has(event.code) && !isInteractiveTarget(event.target)) {
       event.preventDefault();
       this.keys.add(event.code);

@@ -361,6 +361,7 @@ export class UI {
 
   refreshDynamic() {
     if (!this.game.sim) return;
+    this.buildMenu?.refreshUndo?.();
     const veilleeButton = this.root?.querySelector?.('[data-until-veillee]');
     if (veilleeButton) {
       veilleeButton.hidden = !this.game.sim.veillee;

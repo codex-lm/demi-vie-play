@@ -103,6 +103,7 @@ html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }
 #build-menu { top: 100px; left: 12px; width: 224px; max-height: calc(100% - 306px); padding: 10px; overflow-y: auto; }
 .menu-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 10px; }
 .fit-intro { margin-top: 0; }
+.undo-dig { margin-bottom: 9px; }
 .fit-details { margin-top: 10px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 4px; background: var(--inset); }
 .fit-facts { margin: 0; font-size: 10px; }
 .fit-facts > div { margin-bottom: 7px; }
@@ -368,7 +369,7 @@ button.wide { width: 100%; margin-top: 7px; font-size: 11px; }
 .dose-effects h3 { margin-top: 0 !important; }
 .dose-effects p { margin: 7px 0 0; color: var(--text-soft); font-size: 10px; line-height: 1.45; }
 
-.m4-backdrop { position: fixed; z-index: 8; inset: 0; display: grid; padding: 24px; place-items: center; background: var(--scrim); backdrop-filter: blur(5px); pointer-events: auto; }
+.m4-backdrop { position: fixed; z-index: 8; inset: 0; display: grid; padding: 24px; place-items: center; background: var(--scrim); pointer-events: auto; }
 .m4-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 18px; overflow-y: auto; border: 1px solid var(--accent-line); border-radius: 8px; background: linear-gradient(145deg, var(--panel), var(--panel-deep)); box-shadow: 0 24px 80px var(--shadow-deep); }
 .m4-dialog h3 { margin: 15px 0 6px; color: var(--accent); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; }
 .m4-projection { display: grid; gap: 6px; margin: 12px 0; padding: 12px; border: 1px solid var(--accent-line); border-radius: 5px; background: var(--accent-wash); }
@@ -587,7 +588,7 @@ table.m5-calendar { display: block; width: 100%; margin: 20px 0 0; font-size: 11
 .m6-title-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
 .m6-title-actions button, .m6-title-layout > .m6-title-content > button, .m6-pause-dialog button, .m6-options-dialog button { min-width: 130px; padding: 10px 16px; }
 .m6-credits { position: absolute; top: 50%; left: 50%; width: min(520px, calc(100% - 32px)); padding: 28px; transform: translate(-50%, -50%); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); text-align: center; }
-.m6-pause-screen, .m6-options-screen, .m6-backdrop { display: grid; place-items: center; background: var(--scrim); backdrop-filter: blur(3px); }
+.m6-pause-screen, .m6-options-screen, .m6-backdrop { display: grid; place-items: center; background: var(--scrim); }
 .m6-pause-dialog, .m6-options-dialog { display: grid; gap: 12px; width: min(460px, calc(100% - 32px)); padding: 26px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 20px 65px var(--shadow-deep); }
 .m6-pause-dialog h2, .m6-options-dialog h2 { margin: 0 0 8px; color: var(--accent-strong); text-align: center; }
 .m6-options-dialog label { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 16px; color: var(--text); }

@@ -7,6 +7,7 @@ export const POI_TEXT = Object.freeze({
   poiGovBunkerName: 'Bunker gouvernemental',
   poiKarstCaveName: 'Grande grotte karstique',
   poiUndergroundRiverName: 'Rivière souterraine',
+  // Saved journals retain this label; STR supplies the current visible name.
   poiBatColonyName: 'Colonie de chauves-souris',
   poiOldQuarryName: 'Ancienne carrière',
   poiCellarName: 'Cave oubliée',
@@ -29,7 +30,7 @@ export const POI_TEXT = Object.freeze({
 
   poiEncounterDialogue: 'Derrière la cloison, un groupe armé de lampes frontales vous observe. Ils proposent de parler avant d’ouvrir leur réserve.',
   poiEncounterRecruit: 'Proposer de vivre avec nous',
-  poiEncounterRecruitEffect: 'Un adulte rejoint la colonie, avec ses besoins et ses compétences.',
+  poiEncounterRecruitEffect: 'Un adulte rejoint l’abri, avec ses besoins et ses compétences.',
   poiEncounterTrade: 'Troquer 5 nourritures',
   poiEncounterTradeEffect: 'Contre 2 médicaments et 3 ferrailles. Impossible sans les vivres.',
   poiEncounterLeave: 'Se saluer et repartir',

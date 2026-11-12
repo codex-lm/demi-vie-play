@@ -1,6 +1,6 @@
 const rows = [
-  ['WaterReserve', 'Build up a drinking water reserve', 'Store nine units of drinking water per colonist.', 'Now we can drink without counting every sip.'],
-  ['FoodReserve', 'Build up a food reserve', 'Store five portions of food per colonist.', 'Those meals will stay in storage. Just knowing they’re there helps.'],
+  ['WaterReserve', 'Build up a drinking water reserve', 'Store nine units of drinking water per resident.', 'Now we can drink without counting every sip.'],
+  ['FoodReserve', 'Build up a food reserve', 'Store five portions of food per resident.', 'Those meals will stay in storage. Just knowing they’re there helps.'],
   ['Insects', 'Set up an insect farm', 'Fit out an insect farm to diversify your food supply.', 'The farm is ready. “Little proteins” won the first vote.'],
   ['Lab', 'Open a laboratory', 'Fit out a powered laboratory to start researching.', 'The lab is open. Let’s leave room for mistakes, too.'],
   ['Archive', 'Make room for an archive', 'Fit out an archive to keep books and improve research.', 'The books are shelved. We can look for something without moving everything first.'],

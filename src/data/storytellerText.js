@@ -79,6 +79,7 @@ export const STORYTELLER_TEXT = Object.freeze({
   dilemma_strangerAtHatch_result_0: 'L’enfant est soigné. La fièvre a gagné un habitant, et les Remonteurs approuvent l’accueil.',
   dilemma_strangerAtHatch_choice_1: 'Donner des vivres sans ouvrir. Les réserves baisseront et le moral restera partagé.',
   dilemma_strangerAtHatch_result_1: 'Le paquet de vivres a été emporté. Personne ne sait si l’enfant a survécu.',
+  // Historical wording is serialized by the simulation; STR overrides its display.
   dilemma_strangerAtHatch_choice_2: 'Ne pas ouvrir. Les Remonteurs le retiendront contre la colonie.',
   dilemma_strangerAtHatch_result_2: 'Les coups ont cessé. Le silence a durablement divisé l’abri.',
 

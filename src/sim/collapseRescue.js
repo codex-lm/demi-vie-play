@@ -8,6 +8,7 @@ import { evaluateProspect } from './structure.js';
 import { collapseAccess } from './collapseAccess.js';
 import { aquiferMaterial, currentWaterTableDepth } from './groundwater.js';
 import { splitTunnelFragments } from './structureFragments.js';
+import { observeRescueNarrative } from './rescueNarrative.js';
 
 const accessChecks = new WeakMap();
 const initializedCollapses = new WeakSet();
@@ -77,6 +78,17 @@ function escapeTargets(sim, excavation) {
     }
   }
   return targets;
+}
+
+// Read-only counterpart of the release check below, used solely to identify
+// the worker whose cell opened each survivor's route. It never plans a route.
+export function rescueExitOpen(sim, source, person) {
+  if (!isWalkable(sim, Math.round(person.x), Math.round(person.y))) return false;
+  const access = collapseAccess(sim, sim.excavations.filter(room => room.state === 'collapsed'));
+  if (access.hasStocks || person.isolatedByCollapse != null) return access.supplied(person);
+  const targets = escapeTargets(sim, source);
+  return targets.some(target => Math.round(person.x) === target.x && Math.round(person.y) === target.y)
+    || findPath(sim, person, targets).length > 0;
 }
 
 function planRescue(sim, source, survivors) {
@@ -173,6 +185,13 @@ function placeRescueOrder(sim, order, mark) {
 // Geometry/path searches run only after a terrain change. The per-tick pass
 // merely checks the small list of people involved in an existing collapse.
 export function updateRescues(sim) {
+  observeRescueNarrative(sim);
+  updateRescuesCore(sim);
+  observeRescueNarrative(sim);
+}
+
+// The rescue planner and its route/working safety rules are unchanged.
+function updateRescuesCore(sim) {
   let checks = accessChecks.get(sim);
   if (!checks) accessChecks.set(sim, checks = new Map());
   const sources = sim.excavations.filter((source) => source.state === 'collapsed');

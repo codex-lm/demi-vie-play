@@ -26,7 +26,7 @@ export const JOURNAL_TEXT_EXTRA_EN = Object.freeze({
   labJournalEvening01: 'A song begins without an announcement. The chorus finds the people who claimed to have forgotten it.',
   labJournalEvening02: 'The rules of the card game have changed again. The elders accuse the young of innovating at the wrong moment.',
   labJournalEvening03: 'A sleeve is mended while a story goes around. The thread moves faster with company.',
-  labJournalEvening04: 'The storyteller stops. Someone knows what comes next, but kindly waits for them to remember.',
+  labJournalEvening04: 'The voice telling the story falls silent. Someone knows what comes next, but kindly waits for it to resume.',
   labJournalEvening05: 'A lamp lights the ceiling. The group decides that one stain looks like a cloud. There is nobody to say otherwise.',
   labJournalEvening06: 'The radio crackles in the silence. Nobody asks it to speak any faster.',
   labJournalEvening07: 'Two bunk neighbors finally trade first names. They already know each other’s snores by heart.',

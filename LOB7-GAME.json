@@ -1,16 +1,25 @@
 {
   "title": "Demi-Vie",
-  "description": "Build an underground colony after a nuclear catastrophe. Carve rooms into the rock and reinforce them before they collapse. Assign work, keep the shelter supplied with air, water, food, and heat, and send expeditions to the surface. Keep your people alive long enough to prepare the Exodus.",
+  "description": "Seal the hatch on twelve survivors after a nuclear catastrophe. Carve rooms into the rock and reinforce them before they collapse. Keep the shelter supplied with air, water, food, and heat. Fetch what was left outside while the radiation halves, and prepare the Exodus.",
   "entrypoint": "index.html",
   "license": "MIT",
-  "genre": ["City builder", "Simulation", "Survival"],
-  "themes": ["Post-apocalyptic", "Underground"],
-  "controls": [
-    "Left-click to select, click and drag to mark out excavations",
-    "Mouse wheel to zoom",
-    "WASD, ZQSD, or arrow keys to move the camera",
-    "Space to pause or resume, 1–5 to change speed",
-    "− and + to change the interface size"
+  "genre": [
+    "City builder",
+    "Simulation",
+    "Survival"
   ],
-  "credits": ["Demi-Vie"]
+  "themes": [
+    "Post-apocalyptic",
+    "Underground"
+  ],
+  "controls": [
+    "Left-click or tap to select, click and drag to mark out excavations",
+    "Mouse wheel, trackpad pinch, or two fingers to zoom; one finger drags the map",
+    "WASD, ZQSD, or arrow keys to move the camera",
+    "Space to pause or resume, 1–5 to change speed: Live, Work, Watch, Hurry, Rush",
+    "A− and A+ to change the interface size; colours, language, and sound are in Options"
+  ],
+  "credits": [
+    "Demi-Vie"
+  ]
 }

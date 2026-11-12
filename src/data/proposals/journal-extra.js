@@ -27,7 +27,7 @@ export const JOURNAL_TEXT_EXTRA = Object.freeze({
   labJournalEvening01: 'Une chanson commence sans annonce. Le refrain retrouve tout seul ceux qui prétendaient l’avoir oublié.',
   labJournalEvening02: 'Les règles du jeu de cartes ont encore changé. Les anciens accusent les jeunes d’innover au mauvais moment.',
   labJournalEvening03: 'On répare une manche pendant qu’une histoire circule. Le fil avance plus vite quand les mains ne sont pas seules.',
-  labJournalEvening04: 'Le conteur s’interrompt. Quelqu’un connaît la suite, mais attend gentiment qu’il la retrouve.',
+  labJournalEvening04: 'La voix qui raconte s’interrompt. Quelqu’un connaît la suite, mais attend gentiment qu’elle reprenne.',
   labJournalEvening05: 'Une lampe éclaire le plafond. On décide que cette tache ressemble à un nuage, faute de témoin contraire.',
   labJournalEvening06: 'La radio grésille dans le silence. Personne ne lui demande de parler plus vite.',
   labJournalEvening07: 'Deux voisins de couchette échangent enfin leurs prénoms. Ils connaissaient déjà par cœur leurs ronflements.',

@@ -7,6 +7,7 @@ import { drawColonistAction } from '../../art/m6/actions.js';
 import { colonistM6Action } from './m6-world.js';
 import { colonistColdArt, drawColdBreath } from './cold.js';
 import { WORK } from '../data/balance.js';
+import { gestureGain, ticksPerSecond } from '../data/speeds.js';
 
 // In one tick a person walks at most WALK_CELLS_PER_MINUTE horizontally;
 // ladders and elevators only move vertically. A jump of more than two ticks of
@@ -16,14 +17,111 @@ import { WORK } from '../data/balance.js';
 const MAX_TICK_STEP_X = WORK.WALK_CELLS_PER_MINUTE * 2 + .6;
 const MAX_TICK_STEP_Y = Math.max(WORK.WALK_CELLS_PER_MINUTE, WORK.LADDER_CELLS_PER_MINUTE, WORK.ELEVATOR_CELLS_PER_MINUTE) + .6;
 
-/** World position between the previous and the current tick, alpha in [0, 1]. */
-export function interpolatedColonistPosition(colonist, alpha = 0) {
+const MOVE_EPSILON = 1e-6;
+
+function openLeg(world, column, fromY, toY) {
+  const x = Math.round(column), step = toY >= fromY ? 1 : -1;
+  for (let y = Math.round(fromY); y !== Math.round(toY) + step; y += step) if (!world.isEmpty(x, y)) return false;
+  return true;
+}
+
+/** One tick can hold a walk and a climb (reach the ladder, then go up it; or
+ * come off it and walk on). The sim only keeps both ends. Returns which leg
+ * came first, 'walk' or 'climb', or null when the move is a single straight
+ * line. At "Vivre" a tick lasts 0.4 s: a straight diagonal would slide the
+ * person through the rock beside the shaft. */
+function tickCorner(sim, colonist, prevX, prevY) {
+  if (Math.abs(colonist.x - prevX) < MOVE_EPSILON || Math.abs(colonist.y - prevY) < MOVE_EPSILON) return null;
+  const world = sim?.world;
+  if (typeof world?.isEmpty !== 'function') return null;
+  // Walking first means climbing in the arrival column, and the reverse.
+  const walkFirst = openLeg(world, colonist.x, prevY, colonist.y);
+  const climbFirst = openLeg(world, prevX, prevY, colonist.y);
+  if (walkFirst !== climbFirst) return walkFirst ? 'walk' : 'climb';
+  if (!walkFirst) return null;
+  // Both columns are open (a tall room beside its shaft): the task of the
+  // last leg decides. A climber ended on the ladder; a walker left it.
+  if (colonist.task === 'climb') return 'walk';
+  if (colonist.task === 'walk' || colonist.task === 'carrying') return 'climb';
+  return null;
+}
+
+/** World position between the previous and the current tick, alpha in [0, 1].
+ * A person who moved this tick also reports their gait (moving: 'walk' or
+ * 'climb'). With the sim, a walk-and-climb tick follows its corner and names
+ * the leg under way (leg, same values); without it the move is a straight line. */
+export function interpolatedColonistPosition(colonist, alpha = 0, sim = null) {
   const prevX = Number.isFinite(colonist.prevX) ? colonist.prevX : colonist.x;
   const prevY = Number.isFinite(colonist.prevY) ? colonist.prevY : colonist.y;
   const dx = colonist.x - prevX, dy = colonist.y - prevY;
   if (Math.abs(dx) > MAX_TICK_STEP_X || Math.abs(dy) > MAX_TICK_STEP_Y) return { x: colonist.x, y: colonist.y };
+  if (Math.abs(dx) + Math.abs(dy) < MOVE_EPSILON) return { x: colonist.x, y: colonist.y };
   const t = Math.max(0, Math.min(1, Number(alpha) || 0));
-  return { x: prevX + dx * t, y: prevY + dy * t };
+  const first = sim ? tickCorner(sim, colonist, prevX, prevY) : null;
+  if (!first) return { x: prevX + dx * t, y: prevY + dy * t, moving: Math.abs(dy) > Math.abs(dx) ? 'climb' : 'walk' };
+  // Each leg takes the share of the tick its own pace needs.
+  const walkTime = Math.abs(dx) / WORK.WALK_CELLS_PER_MINUTE;
+  const climbTime = Math.abs(dy) / (Math.abs(dy) > WORK.LADDER_CELLS_PER_MINUTE + .6 ? WORK.ELEVATOR_CELLS_PER_MINUTE : WORK.LADDER_CELLS_PER_MINUTE);
+  const walkShare = walkTime / (walkTime + climbTime);
+  if (first === 'walk') {
+    return t < walkShare ? { x: prevX + dx * (t / walkShare), y: prevY, leg: 'walk', moving: 'walk' }
+      : { x: colonist.x, y: prevY + dy * ((t - walkShare) / (1 - walkShare)), leg: 'climb', moving: 'climb' };
+  }
+  const climbShare = 1 - walkShare;
+  return t < climbShare ? { x: prevX, y: prevY + dy * (t / climbShare), leg: 'climb', moving: 'climb' }
+    : { x: prevX + dx * ((t - climbShare) / (1 - climbShare)), y: colonist.y, leg: 'walk', moving: 'walk' };
+}
+
+// colonist.animation counts ticks of effort; this turns it into pose seconds.
+const POSE_RATE = 0.35;
+// Limbs never cycle faster than this many pose seconds per real second: about
+// five strides, four ladder rungs or three pick swings. A walk at "Vivre" (4 a
+// second) is under it and keeps its feet on the ground; a 24-cell ladder
+// climbed in one tick, or any move at the faster speeds, would otherwise be a
+// blur.
+const MAX_LIMB_RATE = 4.8;
+const poseClocks = new WeakMap();
+
+/** How drawn gestures follow the ticks at this game speed (see poseTime). */
+export function colonistMotion(speed) {
+  const rate = ticksPerSecond(speed);
+  return { gain: gestureGain(speed), maxStep: rate > 0 ? MAX_LIMB_RATE / rate : Infinity };
+}
+
+/** Pose clock of one person at this instant of the current tick.
+ * The sim advances colonist.animation once per tick. Drawn as it is, a gesture
+ * would hold still for a whole tick (0.4 s at "Vivre") and a pick swing would
+ * take ten times longer there than at "Travailler". The renderer therefore
+ * keeps its own clock per person: it moves between the last two ticks with
+ * alpha, strides follow the distance covered, and gestures made on the spot
+ * keep the rhythm of "Travailler" when the game runs slower (motion.gain).
+ * Only a caller that passes motion (the frame painter) advances the clock. */
+export function poseTime(sim, colonist, alpha = 1, motion = null) {
+  const animation = colonist.animation;
+  if (!Number.isFinite(animation)) return null;
+  const tick = sim?.tick;
+  if (!Number.isFinite(tick)) return animation * POSE_RATE;
+  let clock = poseClocks.get(colonist);
+  // A loaded save, a new scenario or a person edited outside a tick starts
+  // over from the plain value.
+  if (!clock || tick < clock.tick || animation < clock.animation || (tick === clock.tick && animation !== clock.animation)) {
+    if (!motion) return animation * POSE_RATE;
+    clock = { tick, animation, from: animation * POSE_RATE, to: animation * POSE_RATE };
+    poseClocks.set(colonist, clock);
+  } else if (tick > clock.tick) {
+    if (!motion) return animation * POSE_RATE;
+    const ticks = tick - clock.tick;
+    const moved = Math.abs(colonist.x - (colonist.prevX ?? colonist.x)) + Math.abs(colonist.y - (colonist.prevY ?? colonist.y)) > MOVE_EPSILON;
+    const raw = (animation - clock.animation) * POSE_RATE;
+    const step = Math.min(moved ? raw : raw * (motion.gain ?? 1), (motion.maxStep ?? Infinity) * ticks);
+    // Several ticks can run in one frame: alpha only spans the last of them.
+    clock.from = clock.to + step * (ticks - 1) / ticks;
+    clock.to += step;
+    clock.tick = tick;
+    clock.animation = animation;
+  }
+  const t = Math.max(0, Math.min(1, Number(alpha) || 0));
+  return clock.from + (clock.to - clock.from) * t;
 }
 
 function line(ctx, x1, y1, x2, y2) {
@@ -134,6 +232,7 @@ function drawCrisis(ctx, behavior, size) {
 }
 
 
+const GAITS = ['walk', 'carry', 'climb'];
 const POSES = {
   sleeping: 'sleep', dead: 'sleep', walk: 'walk', climb: 'climb', carrying: 'carry',
   dig: 'dig', clear: 'work', repair: 'work', pump: 'work', farm: 'work', cook: 'work',
@@ -142,7 +241,7 @@ const POSES = {
   isolate: 'idle', argue: 'talk', refuseWork: 'crisis', surfaceFever: 'crisis',
 };
 
-export function colonistArtOptions(sim, colonist, time = 0) {
+export function colonistArtOptions(sim, colonist, time = 0, alpha = 1, motion = null) {
   const appearance = colonistAppearance(sim, colonist);
   // A suit is clothing: it must not erase a ladder climb or force a resting person to walk.
   const workPose = colonistWorkPose(sim, { ...colonist, suit: false });
@@ -150,7 +249,7 @@ export function colonistArtOptions(sim, colonist, time = 0) {
   return {
     ...appearance, pose, suit: Boolean(colonist.suit),
     kind: colonist.kind, domesticated: colonist.domesticated,
-    t: Number.isFinite(colonist.animation) ? colonist.animation * 0.35 : time,
+    t: poseTime(sim, colonist, alpha, motion) ?? time,
     facing: colonist.direction === -1 ? -1 : 1,
     // No cleanliness system exists yet: only actual dusty tasks, loads or explicit dirt qualify.
     dirty: Boolean(colonist.dirty || ['dig', 'clear'].includes(workPose)
@@ -263,20 +362,37 @@ export function carryingParent(sim, child) {
 }
 
 /** Visual feet in world metres, shared by silhouettes and selection arrows. */
-export function colonistVisualPosition(sim, colonist, alpha = 0, time = 0, occupants = null) {
+export function colonistVisualPosition(sim, colonist, alpha = 0, time = 0, occupants = null, motion = null) {
   const activity = colonistM6Action(sim, colonist);
-  let { x: worldX, y: worldY } = interpolatedColonistPosition(colonist, alpha);
-  if (colonist.task === 'sleeping' && Number.isFinite(colonist.bedX) && Number.isFinite(colonist.bedY)) {
+  const step = interpolatedColonistPosition(colonist, alpha, sim);
+  let { x: worldX, y: worldY } = step;
+  const options = colonistArtOptions(sim, colonist, time, alpha, motion);
+  const share = Math.max(0, Math.min(1, Number(alpha) || 0));
+  // An authored action (carrying a child, climbing out) and a fall keep their own drawing.
+  const selfMoving = !activity && colonist.task !== 'fall' && colonist.health > 0;
+  // The tick that brings someone to their bed, their seat or their work only
+  // keeps the new task. Until that tick is over they are still on the way: at
+  // "Vivre" they would otherwise slide for 0.4 s already digging or asleep,
+  // or jump onto the bed or the bike before reaching it.
+  const onTheWay = selfMoving && Boolean(step.moving) && share < 1 && !GAITS.includes(options.pose);
+  // A tick that walks to a ladder and climbs it only keeps the last task:
+  // each leg is drawn with its own gait.
+  if (onTheWay || (selfMoving && step.leg && GAITS.includes(options.pose))) {
+    options.pose = (step.leg ?? step.moving) === 'climb' ? 'climb' : colonist.carrying ? 'carry' : 'walk';
+  }
+  if (onTheWay) options.onTheWay = true;
+  if (!onTheWay && colonist.task === 'sleeping' && Number.isFinite(colonist.bedX) && Number.isFinite(colonist.bedY)) {
     worldX = colonist.bedX; worldY = colonist.bedY;
   } else if (activity?.action !== 'climbingOut' && activity?.action !== 'listeningRock') {
     const key = `${Math.round(colonist.x)}:${Math.round(colonist.y)}`;
     const group = occupants?.get(key) ?? sim.colonists.filter((person) => person.health > 0 && person.task !== 'sleeping' && !carryingParent(sim, person)
       && Math.round(person.x) === Math.round(colonist.x) && Math.round(person.y) === Math.round(colonist.y)).map((person) => person.id);
     const slot = group.indexOf(colonist.id);
-    if (group.length > 1) worldX += (slot - (group.length - 1) / 2) * Math.min(.24, .72 / group.length);
-    if (['idle', 'sit', 'socialize', 'drink'].includes(colonist.task)) worldX += Math.sin(colonist.id * 12.9898 + .7) * (group.length > 1 ? .055 : .14);
+    // A sleeper still walking to bed is not counted among the people standing there.
+    if (group.length > 1 && (slot >= 0 || !onTheWay)) worldX += (slot - (group.length - 1) / 2) * Math.min(.24, .72 / group.length);
+    // Someone on the way to their seat drifts to its small offset as they arrive.
+    if (['idle', 'sit', 'socialize', 'drink'].includes(colonist.task)) worldX += Math.sin(colonist.id * 12.9898 + .7) * (group.length > 1 ? .055 : .14) * (onTheWay ? share : 1);
   }
-  const options = colonistArtOptions(sim, colonist, time);
   if (activity) {
     options.action = activity.action;
     if (activity.child) options.child = { ...colonistAppearance(sim, activity.child), lifeStage: activity.child.lifeStage };
@@ -318,7 +434,7 @@ export function colonistVisualPosition(sim, colonist, alpha = 0, time = 0, occup
     return { x: (shaft ? shaft.x + shaft.w / 2 : worldX + .5) - .5 * bodyScale, y: worldY + 1,
       bodyScale, cellScale: bodyScale / artScale, artScale, machine: false, options };
   }
-  const sleeping = sleepingPlacement(sim, colonist, options, bodyScale, artScale);
+  const sleeping = onTheWay ? null : sleepingPlacement(sim, colonist, options, bodyScale, artScale);
   if (sleeping) return sleeping;
   const machine = machinePlacement(sim, colonist, options, time);
   if (machine) Object.assign(options, { t: machine.t, facing: machine.facing, handTarget: machine.handTarget });
@@ -378,6 +494,7 @@ export function drawColonists(ctx, game, view) {
   const size = view.cellSize;
   const alpha = view.alpha ?? 0;
   const time = game.options?.reduceMotion ? 0 : game.renderTime ?? view.now ?? 0;
+  const motion = colonistMotion(game.speed || game.previousSpeed);
   const occupants = new Map();
   for (const colonist of game.sim.colonists) {
     if (colonist.health <= 0 || colonist.task === 'sleeping' || carryingParent(game.sim, colonist)) continue;
@@ -387,7 +504,7 @@ export function drawColonists(ctx, game, view) {
   }
   for (const colonist of game.sim.colonists) {
     if ((colonist.health <= 0 && colonist.bodyLocation === 'ossuary') || carryingParent(game.sim, colonist)) continue;
-    const placement = colonistVisualPosition(game.sim, colonist, alpha, time, occupants);
+    const placement = colonistVisualPosition(game.sim, colonist, alpha, time, occupants, motion);
     if (!game.sim.world.isVisible(Math.round(placement.x - .5), Math.round(placement.y - 1))) continue;
     const { options, bodyScale, artScale, machine } = placement;
     if (game.options?.reduceMotion) options.t = 0;
@@ -406,7 +523,7 @@ export function drawColonists(ctx, game, view) {
       drawColonistAction(ctx, x, y, { ...options, cellPx: cell }, options.action, options.t);
     } else drawArtColonist(ctx, x, y, cell, options);
     ctx.save(); ctx.translate(x, y);
-    drawActivityAccessory(ctx, colonist, size * bodyScale, options.t, options.facing);
+    if (!options.onTheWay) drawActivityAccessory(ctx, colonist, size * bodyScale, options.t, options.facing);
     drawCrisis(ctx, behavior, size * bodyScale);
     ctx.restore();
     if (options.coldIntensity) drawColdBreath(ctx, placement, colonist, { intensity: options.coldIntensity }, view, time);

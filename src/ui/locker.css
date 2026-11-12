@@ -1,0 +1,44 @@
+.locker-heading { align-items: flex-start; }
+.locker-heading .fact { display: inline-flex; gap: .4rem; padding: 0; }
+.locker-heading .fact > span { display: none; }
+.locker-before { margin: .35rem 0; color: var(--text-soft); line-height: 1.4; }
+.locker-token { margin: .8rem 0; }
+.locker-token-button { width: 100%; display: flex; align-items: center; gap: .7rem; padding: .65rem; text-align: left; border: 1px solid var(--accent-line); border-radius: .3rem; background: var(--panel-deep); }
+.locker-token-button > span:last-child { display: grid; gap: .3rem; }
+.locker-token-button small { color: var(--text-soft); }
+.locker-token-button > span:last-child > span { color: var(--accent); }
+.locker-token-round { display: grid; place-items: center; flex: 0 0 2.8rem; width: 2.8rem; height: 2.8rem; border-radius: 50%; border: 3px double var(--accent-ink); outline: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 800; letter-spacing: .04em; }
+.locker-dosimeter { padding: .6rem .65rem; border: 1px solid var(--line-strong); background: var(--panel-deep); }
+.locker-dosimeter h3 { margin-top: 0; }
+.locker-dosimeter .dose-effects { margin-top: .5rem; }
+.locker-dosimeter .dose-effects h3 { font-size: inherit; }
+.locker-task { margin-top: .6rem; }
+.locker-social > section, .locker-needs, .locker-fine { margin-top: .8rem; padding-top: .6rem; border-top: 1px solid var(--line); }
+.locker-social h3 { margin: 0 0 .4rem; }
+.locker-object { padding: .65rem; border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--panel-soft); }
+.locker-object p { margin: .3rem 0; line-height: 1.45; }
+.locker-object small, .locker-hint, .locker-history + small { color: var(--text-muted); font-size: .85em; }
+.locker-hint { display: block; margin-bottom: .35rem; }
+.locker-detail { margin: .2rem 0; line-height: 1.45; }
+.locker-detail summary { padding: .35rem .1rem; cursor: pointer; touch-action: pan-y; }
+.locker-detail summary::marker { color: var(--accent); font-size: .75em; }
+.locker-detail > small { display: block; margin: 0 0 .35rem .8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.locker-detail summary:focus-visible, .locker-needs > summary:focus-visible, .locker-fine > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.locker-mood-primary { font-size: 1.05em; color: var(--accent-strong); }
+.locker-mood-primary summary { font-style: italic; }
+.locker-mood-others { font-size: .9em; color: var(--text-soft); }
+.locker-care-help { font-size: .85em; color: var(--text-muted); line-height: 1.45; }
+.locker-habits, .locker-relations { padding-left: 1rem; margin: .25rem 0; }
+.locker-habits li { margin: .45rem 0; line-height: 1.4; }
+.locker-relations { list-style: none; padding-left: 0; }
+.locker-needs > summary, .locker-fine > summary { min-height: 2.5rem; display: list-item; padding: .5rem .1rem; cursor: pointer; color: var(--text-soft); }
+.locker-needs .meter-row { margin-bottom: .25rem; }
+.locker-needs .meter { height: .22rem; }
+.locker-needs .meter-row > div:first-child { font-size: .85em; }
+.locker-history { list-style: none; padding: 0; margin: .4rem 0; }
+.locker-history li { display: grid; grid-template-columns: max-content 1fr; gap: .55rem; padding: .35rem 0; line-height: 1.4; }
+.locker-history time { color: var(--accent); font-variant-numeric: tabular-nums; }
+.locker-fine .work-priorities { margin: .4rem 0; }
+@media (pointer: coarse) {
+  .locker-detail summary, .locker-needs > summary, .locker-fine > summary { min-height: 44px; }
+}

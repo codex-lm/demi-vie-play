@@ -12,6 +12,12 @@ import {
 } from './models.js';
 import { formatDose, formatDoseRate, formatNumber, formatTemperature } from './tooltips.js';
 import { endStoryKind } from './m6cStory.js';
+import { veilleeInscriptionLines } from './veillee.js';
+import { crewSkyHoursMarkup, expeditionPricesMarkup, skyDoseText } from './skyHours.js';
+import { departureLines } from './demies.js';
+import { LEFT_OUTSIDE_RULES } from '../data/leftOutside.js';
+import { outsideDefinition, outsideItem } from '../sim/leftOutside.js';
+import { outsideCrewSkyMarkup, outsideName, outsidePriceMarkup, outsideRemainingText } from './leftOutside.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -63,14 +69,14 @@ export function surfaceConstructionPreviewPanel(preview) {
   </div>`;
 }
 
-function expeditionFrostMessage(preview, language) {
+function expeditionFrostMessage(preview, language, sim) {
   const frost = preview.frost;
   if (!frost) return '';
   const values = {
     hours: formatNumber(frost.maxDurationHours, true, language),
     day: frost.thawDay,
     days: frost.daysRemaining,
-    site: tr(`site_${preview.siteId}`, {}, language),
+    site: preview.outsideId && sim ? outsideName(sim, preview.outsideId, language) : tr(`site_${preview.siteId}`, {}, language),
   };
   const hasThaw = Number.isFinite(frost.thawTick);
   const limitKey = hasThaw ? 'expeditionFrostLimit' : 'expeditionFrostLimitNoThaw';
@@ -84,28 +90,34 @@ function expeditionFrostMessage(preview, language) {
   return message;
 }
 
-export function expeditionPreviewPanel(preview, colonists = [], language = getLanguage()) {
+export function expeditionPreviewPanel(preview, colonists = [], language = getLanguage(), sim = null) {
   if (!preview) return '';
   const t = (key, values) => tr(key, values, language);
   const nameFor = (id) => colonists.find((colonist) => colonist.id === id)?.name
     ?? t('colonistNumber', { id: id + 1 });
   const crew = preview.colonistIds.map(nameFor).join(', ');
   const needsRisk = (preview.needsRisk ?? []).map((risk) => `<li data-colonist-id="${escapeHtml(risk.id)}" data-need="${escapeHtml(risk.need)}">${escapeHtml(t(`expeditionNeedRisk_${risk.need}`, { name: nameFor(risk.id) }))}</li>`).join('');
-  const frostMessage = expeditionFrostMessage(preview, language);
+  const frostMessage = expeditionFrostMessage(preview, language, sim);
   const outOfReach = preview.frost?.siteOutOfReach === true;
-  return `<div class="panel-heading"><div><span class="eyebrow">${escapeHtml(t('expeditionPreview'))}</span><h2>${escapeHtml(t(`site_${preview.siteId}`))}</h2></div>
+  const isOutside = Boolean(preview.outsideId);
+  const outside = preview.outsideId && sim ? outsideDefinition(sim, preview.outsideId) : null;
+  const loot = lootList(preview.loot, language);
+  return `<div class="panel-heading"><div><span class="eyebrow">${escapeHtml(t('expeditionPreview'))}</span><h2>${escapeHtml(outside ? t(outside.titleKey) : t(`site_${preview.siteId}`))}</h2></div>
     <button type="button" class="icon-button" data-m4-action="closeModal" aria-label="${escapeHtml(t('close'))}">×</button></div>
-    <p class="muted">${escapeHtml(t('expeditionCrew'))} · ${escapeHtml(crew)}</p>
+    <p class="muted">${escapeHtml(isOutside ? t('outsideCrew', { max: LEFT_OUTSIDE_RULES.MAX_CREW }) : t('expeditionCrew'))} · ${escapeHtml(crew)}</p>
+    ${isOutside ? `<p class="menu-note">${escapeHtml(t('outsideChoose'))}</p>` : ''}
     <div class="m4-projection">
-      <strong>${escapeHtml(t('expeditionDose', { value: formatDose(preview.dosePerPerson, language) }))}</strong>
-      <span>${escapeHtml(t('expeditionDuration', { value: formatNumber(preview.durationHours, true, language) }))}</span>
+      <strong>${escapeHtml(t('expeditionDose', { value: skyDoseText(preview.dosePerPerson, language) }))}</strong>
+      <span>${escapeHtml(t('expeditionDuration', { value: formatNumber(isOutside ? Math.round(preview.durationHours * 10) / 10 : preview.durationHours, !isOutside, language) }))}</span>
     </div>
+    ${outside ? outsidePriceMarkup(sim, preview.outsideId, language, preview) : expeditionPricesMarkup(sim ?? { tick: preview.previewTick }, preview, language)}
+    ${outside ? `<p class="menu-note">${escapeHtml(t('outsidePriceContext'))}</p><p class="outside-reward">${escapeHtml(t(outside.rewardKey))}</p>` : ''}
     ${frostMessage ? `<p class="m4-warning m6f-expedition-frost" data-expedition-frost data-site-out-of-reach="${outOfReach}">${escapeHtml(frostMessage)}</p>` : ''}
-    <h3>${escapeHtml(t('expeditionLoot'))}</h3><ul class="m4-costs loot-list">${lootList(preview.loot, language)}</ul>
-    <p class="menu-note">${escapeHtml(t('expeditionCarryCapacity', {
+    ${!isOutside || loot ? `<h3>${escapeHtml(t('expeditionLoot'))}</h3><ul class="m4-costs loot-list">${loot}</ul>` : ''}
+    ${!isOutside ? `<p class="menu-note">${escapeHtml(t('expeditionCarryCapacity', {
       value: formatNumber(preview.carryCapacity ?? EXPEDITION.CARRY_UNITS_PER_PERSON * (preview.colonistIds?.length ?? 1), true, language),
       count: formatNumber(preview.colonistIds?.length ?? 1, true, language),
-    }))}</p>
+    }))}</p>` : ''}
     <h3>${escapeHtml(t('expeditionRisks'))}</h3><ul class="m4-risks">${(preview.risks ?? []).map((risk) => `<li>${escapeHtml(t(`risk_${risk}`))}</li>`).join('')}</ul>
     ${needsRisk ? `<ul class="m4-risks m6e-expedition-needs">${needsRisk}</ul>` : ''}
     <p class="m4-warning">${escapeHtml(t('encounterRisk', { value: formatNumber((preview.encounterChance ?? 0) * 100, true, language) }))}</p>
@@ -149,14 +161,20 @@ export function surfacePanel(sim, state = {}) {
   const definition = SURFACE_STRUCTURES[structureType];
   const sites = (sim.surface?.sites ?? []).filter((site) => site.revealed);
   const siteId = sites.some((site) => site.id === state.siteId) ? state.siteId : sites[0]?.id;
+  const outside = state.outsideId ? outsideDefinition(sim, state.outsideId) : null;
+  const outsideState = outside ? outsideItem(sim, state.outsideId) : null;
+  const outsideAvailable = outsideState?.status === 'available' && sim.tick < outsideState.deadlineTick;
+  const outsideChoices = (sim.leftOutside?.items ?? []).filter((item) => item.status === 'available' && sim.tick < item.deadlineTick);
+  const maxCrew = outside ? LEFT_OUTSIDE_RULES.MAX_CREW : EXPEDITION.MAX_CREW;
   const crewIds = state.crewIds instanceof Set ? state.crewIds : new Set(state.crewIds ?? []);
   const buildPreview = state.buildPreview?.structureType === structureType && state.buildPreview?.x === structureX
     ? state.buildPreview : null;
-  const forecast = hud.forecastDate ? tr('date', hud.forecastDate) : tr('unknown');
+  const departure = departureLines(sim);
   const active = sim.expeditions?.active ?? [];
   return `<div class="surface-panel">
     <section class="m4-section"><h3>${escapeHtml(tr('surfaceZone'))}</h3>
-      <div class="m4-current"><span>${escapeHtml(tr('surfaceDose'))}</span><strong>${formatDoseRate(hud.dose)} mSv/h</strong><small>${escapeHtml(tr('forecast', { value: forecast }))}</small></div>
+      <div class="m4-current"><span>${escapeHtml(tr('surfaceDose'))}</span><strong>${formatDoseRate(hud.dose)} mSv/h</strong><small>${escapeHtml(departure.habitable)}</small>${departure.departure ? `<small>${escapeHtml(departure.departure)}</small>` : ''}</div>
+      <p class="menu-note">${escapeHtml(departure.context)} ${escapeHtml(tr('demiesMilestoneContext'))}</p>
       <div class="m4-form-grid"><label>${escapeHtml(tr('surfaceZone'))}<input type="number" min="0" max="${(sim.world?.width ?? WORLD.WIDTH) - 1}" step="1" value="${hud.selectedX}" data-m4-setting="zone"></label>
       <label>${escapeHtml(tr('exodusThreshold'))}<input type="number" min="0.0001" step="0.001" value="${hud.threshold}" data-m4-setting="threshold"></label></div>
       <p class="menu-note">${escapeHtml(tr('surfaceZoneHelp', { x: hud.selectedX }))}</p>
@@ -172,11 +190,17 @@ export function surfacePanel(sim, state = {}) {
     </section>
     <section class="m4-section"><h3>${escapeHtml(tr('expeditions'))}</h3>
       <p class="m4-weather">${escapeHtml(tr('weather'))} · <strong>${escapeHtml(tr(hud.weather))}</strong></p>
-      <label>${escapeHtml(tr('expeditionSite'))}<select data-m4-setting="expeditionSite" ${sites.length ? '' : 'disabled'}>${sites.map((site) => `<option value="${site.id}" ${site.id === siteId ? 'selected' : ''}>${escapeHtml(tr(`site_${site.id}`))}</option>`).join('')}</select></label>
-      <fieldset class="crew-picker"><legend>${escapeHtml(tr('expeditionCrew'))}</legend>${(sim.colonists ?? []).filter((colonist) => colonist.health > 0 && !colonist.dead).map((colonist) => `<label class="crew-choice ${colonist.surfaceCrewId ? 'disabled' : ''}"><input type="checkbox" data-m4-crew="${colonist.id}" ${crewIds.has(colonist.id) ? 'checked' : ''} ${colonist.surfaceCrewId ? 'disabled' : ''}><span>${escapeHtml(colonist.name)}</span><small>${escapeHtml(tr('scoutSkill'))} ${formatNumber(colonist.skills?.scout ?? 0, true)} · ${formatDose(colonist.dose ?? 0)} mSv</small></label>`).join('')}</fieldset>
-      <p class="menu-note">${escapeHtml(tr('crewCount', { count: crewIds.size, max: EXPEDITION.MAX_CREW }))}</p>
-      <button type="button" class="wide primary" data-m4-action="expeditionPreview" ${!siteId || crewIds.size < EXPEDITION.MIN_CREW || crewIds.size > EXPEDITION.MAX_CREW || sim.weather?.expeditionsBlocked ? 'disabled' : ''}>${escapeHtml(tr('expeditionPreview'))}</button>
-      ${active.length ? `<h4>${escapeHtml(tr('activeExpeditions'))}</h4><ul class="active-expeditions">${active.map((expedition) => `<li><span>${escapeHtml(tr(`site_${expedition.siteId}`))}</span><strong>${escapeHtml(tr(expedition.state))}</strong></li>`).join('')}</ul>` : ''}
+      <label>${escapeHtml(tr('expeditionSite'))}<select data-m4-setting="expeditionSite" ${sites.length || outsideChoices.length ? '' : 'disabled'}>
+      ${outsideChoices.length || outside ? `<optgroup label="${escapeHtml(tr('outsideTitle'))}">${(outside && !outsideChoices.some(item => item.id === state.outsideId) ? [...outsideChoices, outsideState] : outsideChoices).filter(Boolean).map((item) => `<option value="outside:${escapeHtml(item.id)}" ${item.id === state.outsideId ? 'selected' : ''} ${item.status !== 'available' ? 'disabled' : ''}>${escapeHtml(outsideName(sim, item.id))}</option>`).join('')}</optgroup>` : ''}
+      ${sim.leftOutside ? `<optgroup label="${escapeHtml(tr('outsideOrdinarySites'))}">` : ''}${sites.map((site) => `<option value="${site.id}" ${!outside && site.id === siteId ? 'selected' : ''}>${escapeHtml(tr(`site_${site.id}`))}</option>`).join('')}${sim.leftOutside ? '</optgroup>' : ''}</select></label>
+      ${outside ? `<div class="outside-selected" data-outside-selected="${escapeHtml(state.outsideId)}"><strong>${escapeHtml(tr(outside.titleKey))}</strong><p>${escapeHtml(tr(outside.rewardKey))}</p><p>${escapeHtml(outsideAvailable ? outsideRemainingText(sim, outsideState) : tr(`outsideStatus_${outsideState.status}`))}</p><p>${escapeHtml(tr('outsideChoose'))}</p><button type="button" data-m4-action="outsideNotebook">${escapeHtml(tr('outsideBackNotebook'))}</button></div>` : ''}
+      <fieldset class="crew-picker"><legend>${escapeHtml(outside ? tr('outsideCrew', { max: maxCrew }) : tr('expeditionCrew'))}</legend>${(sim.colonists ?? []).filter((colonist) => colonist.health > 0 && !colonist.dead).map((colonist) => `<label class="crew-choice ${colonist.surfaceCrewId ? 'disabled' : ''}"><input type="checkbox" data-m4-crew="${colonist.id}" ${crewIds.has(colonist.id) ? 'checked' : ''} ${colonist.surfaceCrewId ? 'disabled' : ''}><span>${escapeHtml(colonist.name)}</span><small>${escapeHtml(tr('scoutSkill'))} ${formatNumber(colonist.skills?.scout ?? 0, true)} · ${formatDose(colonist.dose ?? 0)} mSv · ${outside ? outsideCrewSkyMarkup(sim, colonist, state.outsideId) : crewSkyHoursMarkup(sim, colonist, siteId)}</small></label>`).join('')}</fieldset>
+      <p class="menu-note">${escapeHtml(tr('demiesCrewSkyContext'))}</p>
+      <p class="menu-note">${escapeHtml(tr('crewCount', { count: crewIds.size, max: maxCrew }))}</p>
+      ${outside ? outsidePriceMarkup(sim, state.outsideId) : expeditionPricesMarkup(sim, { siteId, colonistIds: [...crewIds] })}
+      ${outside ? `<p class="menu-note">${escapeHtml(tr('outsidePriceContext'))}</p>` : ''}
+      <button type="button" class="wide primary" data-m4-action="expeditionPreview" ${(!outside && !siteId) || (outside && !outsideAvailable) || crewIds.size < EXPEDITION.MIN_CREW || crewIds.size > maxCrew || sim.weather?.expeditionsBlocked ? 'disabled' : ''}>${escapeHtml(tr('expeditionPreview'))}</button>
+      ${active.length ? `<h4>${escapeHtml(tr('activeExpeditions'))}</h4><ul class="active-expeditions">${active.map((expedition) => `<li><span>${escapeHtml(expedition.outsideId ? outsideName(sim, expedition.outsideId) : tr(`site_${expedition.siteId}`))}</span><strong>${escapeHtml(tr(expedition.state))}</strong></li>`).join('')}</ul>` : ''}
     </section>
     <section class="m4-section exodus-section"><h3>${escapeHtml(tr('exodus'))}</h3>
       <p>${escapeHtml(tr('kitValue', { value: formatNumber(sim.exodus ? exodusKitModel(sim).scoreValue : 0, true) }))}</p>
@@ -293,7 +317,7 @@ function endStoryText(entry, sim) {
   if (getLanguage() === 'en' && ['labStoryNeighbors', 'labStorySilencedNeighbors'].includes(entry.code)) {
     return tr(entry.code, { names: localizedNeighborList(entry.params?.names) });
   }
-  if (!entry.code.startsWith('m6Story')) return formatJournalEntry(entry, sim.excavations, { story: true });
+  if (!entry.code.startsWith('m6Story')) return formatJournalEntry(entry, sim.excavations, { story: true, sim });
   const params = { ...(entry.params ?? {}) };
   if (params.lawId) params.lawId = tr(`law_${params.lawId}`);
   for (const key of ['names', 'authors']) {
@@ -328,11 +352,12 @@ export function endGamePanel(sim) {
     index,
     kind: endStoryKind(entry, projection),
     text: endStoryText(entry, sim),
-  })).filter((entry) => entry.text);
+  })).filter((entry) => entry.text && entry.entry.code !== 'veilleeInscription');
   const story = Array.isArray(result.story)
     ? (formattedStory.length > 15 ? [...formattedStory.slice(0, 14), formattedStory.at(-1)] : formattedStory)
     : formattedStory.slice(0, 8);
   const children = storyData.children ?? [];
+  const inscriptions = veilleeInscriptionLines(sim);
   const firstSky = victory ? `<canvas class="first-sky" data-children="${escapeHtml(children.map((child) => child.id).join(','))}" data-season="${escapeHtml(storyData.season ?? '')}" data-weather="${escapeHtml(storyData.weather ?? '')}" width="720" height="260" aria-label="${escapeHtml(tr('m6FirstSky'))}"></canvas>` : '';
   return `<div class="end-heading"><span class="eyebrow">${escapeHtml(tr(victory ? 'exodus' : 'eventDefeat', { reason: tr(result.reason), score: formatNumber(score?.total ?? 0, true) }))}</span>
     <h2>${escapeHtml(tr(victory ? 'victoryTitle' : 'defeatTitle'))}</h2><p>${escapeHtml(tr(result.reason))}</p></div>
@@ -340,7 +365,7 @@ export function endGamePanel(sim) {
     <div class="end-columns"><section><h3>${escapeHtml(tr('heritage'))}</h3><div class="score-lines">${scoreBreakdown(score)}</div>
     <p class="heritage-total">${escapeHtml(tr('heritageTotal', { value: formatNumber(score?.total ?? 0, true) }))}</p>
     <button type="button" class="wide primary" data-m4-action="exportColony">${escapeHtml(tr('exportColony'))}</button></section>
-    <section><h3>${escapeHtml(tr('colonyStory'))}</h3><ol class="colony-story m6-end-story">${story.map(({ entry, index, kind, text }) => `<li data-story-code="${escapeHtml(entry.code)}" data-story-index="${index}"${kind ? ` data-story-kind="${kind}"` : ''}><time>${escapeHtml(tr('date', calendarDate(entry.tick)))}</time><span>${escapeHtml(text)}</span></li>`).join('') || `<li>${escapeHtml(tr('emptyStory'))}</li>`}</ol></section></div>`;
+    <section><h3>${escapeHtml(tr('colonyStory'))}</h3><ol class="colony-story m6-end-story">${story.map(({ entry, index, kind, text }) => `<li data-story-code="${escapeHtml(entry.code)}" data-story-index="${index}"${kind ? ` data-story-kind="${kind}"` : ''}><time>${escapeHtml(tr('date', calendarDate(entry.tick)))}</time><span>${escapeHtml(text)}</span></li>`).join('') || `<li>${escapeHtml(tr('emptyStory'))}</li>`}</ol>${inscriptions.length ? `<h3>${escapeHtml(tr('veilleeStoryTitle'))}</h3><ol class="veillee-inscriptions">${inscriptions.map(({ day, key, text }) => `<li data-veillee-inscription="${escapeHtml(key)}" data-veillee-day="${day}">${escapeHtml(text)}</li>`).join('')}</ol>` : ''}</section></div>`;
 }
 
 export class M4Panels {
@@ -352,6 +377,7 @@ export class M4Panels {
     this.structureType = 'antenna';
     this.structureX = SURFACE_SLOTS[0];
     this.siteId = (game.sim.surface?.sites ?? []).find((site) => site.revealed)?.id ?? SURFACE_SITES[0].id;
+    this.outsideId = null;
     this.crewIds = new Set(game.sim.colonists.filter((colonist) => colonist.health > 0 && !colonist.surfaceCrewId).slice(0, 1).map((colonist) => colonist.id));
     this.buildPreview = null;
     this.modal = null;
@@ -365,7 +391,7 @@ export class M4Panels {
 
   surfaceState() {
     return {
-      structureType: this.structureType, structureX: this.structureX, siteId: this.siteId,
+      structureType: this.structureType, structureX: this.structureX, siteId: this.siteId, outsideId: this.outsideId,
       crewIds: this.crewIds, buildPreview: this.buildPreview,
     };
   }
@@ -385,8 +411,13 @@ export class M4Panels {
       this.encounterKey = null;
       this.buildPreview = null;
       this.siteId = (this.sim.surface?.sites ?? []).find((site) => site.revealed)?.id ?? SURFACE_SITES[0].id;
+      this.outsideId = null;
       this.crewIds = new Set(this.sim.colonists.filter((colonist) => colonist.health > 0 && !colonist.surfaceCrewId).slice(0, 1).map((colonist) => colonist.id));
       this.renderModal();
+    }
+    if (this.outsideId && outsideItem(this.game.sim, this.outsideId)?.status !== 'available') {
+      this.outsideId = null;
+      this.refreshMenu();
     }
     const result = this.game.sim.exodus?.result;
     if (result) {
@@ -422,7 +453,7 @@ export class M4Panels {
     }
     let content = '';
     let className = '';
-    if (this.modal.type === 'expedition') content = expeditionPreviewPanel(this.modal.preview, this.game.sim.colonists);
+    if (this.modal.type === 'expedition') content = expeditionPreviewPanel(this.modal.preview, this.game.sim.colonists, getLanguage(), this.game.sim);
     else if (this.modal.type === 'exodus') {
       content = exodusConfirmationPanel(this.modal.preview, this.game.sim);
       className = 'exodus-dialog';
@@ -456,13 +487,36 @@ export class M4Panels {
     this.ui.selectionPanel?.refresh();
   }
 
+  selectOutside(id) {
+    const item = outsideItem(this.game.sim, id);
+    if (!item || item.status !== 'available' || this.game.sim.tick >= item.deadlineTick) {
+      this.ui.toast('expeditionUnavailable');
+      return true;
+    }
+    this.outsideId = id;
+    this.pruneCrew();
+    this.crewIds = new Set([...this.crewIds].slice(0, LEFT_OUTSIDE_RULES.MAX_CREW));
+    this.game.setTool?.({ type: 'select' });
+    if (this.ui.m6Panels) {
+      this.ui.m6Panels.notebookHidden = true;
+      this.ui.m6Panels.refresh(true);
+    }
+    this.ui.buildMenu?.setTab?.('surface');
+    this.refreshMenu();
+    const target = this.ui.buildMenu?.root?.querySelector?.('[data-outside-selected]');
+    target?.scrollIntoView?.({ block: 'nearest' });
+    this.ui.buildMenu?.root?.querySelector?.('[data-m4-crew]')?.focus?.();
+    return true;
+  }
+
   handleChange(target) {
     const setting = target.dataset.m4Setting;
     if (target.dataset.m4Crew !== undefined) {
       const id = Number(target.dataset.m4Crew);
-      if (target.checked && this.crewIds.size >= EXPEDITION.MAX_CREW && !this.crewIds.has(id)) {
+      const maxCrew = this.outsideId ? LEFT_OUTSIDE_RULES.MAX_CREW : EXPEDITION.MAX_CREW;
+      if (target.checked && this.crewIds.size >= maxCrew && !this.crewIds.has(id)) {
         target.checked = false;
-        this.ui.toast('expeditionCrewLimit');
+        this.ui.toast(this.outsideId ? 'outsideCrewLimit' : 'expeditionCrewLimit');
       } else if (target.checked) this.crewIds.add(id);
       else this.crewIds.delete(id);
       this.refreshMenu();
@@ -471,7 +525,11 @@ export class M4Panels {
     if (!setting) return false;
     if (setting === 'structureType') this.structureType = target.value;
     else if (setting === 'structureX') this.structureX = Number(target.value);
-    else if (setting === 'expeditionSite') this.siteId = target.value;
+    else if (setting === 'expeditionSite') {
+      if (target.value.startsWith('outside:')) return this.selectOutside(target.value.slice('outside:'.length));
+      this.siteId = target.value;
+      this.outsideId = null;
+    }
     else if (setting === 'zone' || setting === 'threshold') {
       const x = setting === 'zone' ? Number(target.value) : this.game.sim.radiation.selectedX;
       const threshold = setting === 'threshold' ? Number(target.value) : this.game.sim.radiation.safeThreshold;
@@ -492,6 +550,10 @@ export class M4Panels {
     this.pruneCrew();
     if (action === 'closeModal') {
       this.closeModal();
+      return true;
+    }
+    if (action === 'outsideNotebook') {
+      this.ui.m6Panels?.handleAction('outsidePage');
       return true;
     }
     if (action === 'radiationOverlay') {
@@ -520,11 +582,13 @@ export class M4Panels {
     }
     if (action === 'expeditionPreview') {
       const colonistIds = [...this.crewIds].sort((a, b) => a - b);
-      if (colonistIds.length < EXPEDITION.MIN_CREW || colonistIds.length > EXPEDITION.MAX_CREW) {
+      const maxCrew = this.outsideId ? LEFT_OUTSIDE_RULES.MAX_CREW : EXPEDITION.MAX_CREW;
+      if (colonistIds.length < EXPEDITION.MIN_CREW || colonistIds.length > maxCrew) {
         this.ui.toast('expeditionUnavailable');
         return true;
       }
-      const result = this.game.apply({ type: 'expeditionPreview', siteId: this.siteId, colonistIds });
+      const destination = this.outsideId ? { outsideId: this.outsideId } : { siteId: this.siteId };
+      const result = this.game.apply({ type: 'expeditionPreview', ...destination, colonistIds });
       if (result.preview) this.openModal('expedition', { preview: result.preview });
       else if (!result.ok) this.ui.toast(result.error ?? 'actionFailed');
       return true;
@@ -536,7 +600,11 @@ export class M4Panels {
       }
       const result = this.game.apply({ type: 'expeditionLaunch', previewId: this.modal.preview.id });
       if (!result.ok) this.ui.toast(result.error ?? 'actionFailed');
-      else this.closeModal(true);
+      else {
+        if (this.outsideId && outsideItem(this.game.sim, this.outsideId)?.status !== 'available') this.outsideId = null;
+        this.pruneCrew();
+        this.closeModal(true);
+      }
       this.refreshMenu();
       return true;
     }

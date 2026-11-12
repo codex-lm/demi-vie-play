@@ -304,7 +304,7 @@ export function buildProvenStoryCandidates(sim, entries, projection, suppliedFac
   const crises = completeHistory.filter((entry) => CRISIS_CODES.has(entry.code));
   if (crises.length > 0) add('crisisCount', crises.at(-1).tick, { count: crises.length });
 
-  const expeditionHistory = (sim.expeditions?.history ?? []).filter((record) => record.state !== 'lost')
+  const expeditionHistory = (sim.expeditions?.history ?? []).filter((record) => record.state !== 'lost' && !record.outsideId)
     .sort((a, b) => (a.completedTick ?? 0) - (b.completedTick ?? 0) || a.id - b.id);
   if (expeditionHistory.length > 0) {
     add('firstExpeditionReturn', expeditionHistory[0].completedTick, { site: expeditionHistory[0].siteId });

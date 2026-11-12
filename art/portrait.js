@@ -9,7 +9,7 @@ import {colonistFeatures,colonistOutfit,AGES,JOBS} from './colonist.js';
 export function drawPortrait(c,x,y,size,opts={}){
   if(!c||![x,y,size].every(Number.isFinite)||size<=0)return;
   const age=AGES.includes(opts.age)?opts.age:'adult',job=JOBS.includes(opts.job)?opts.job:'none';
-  const seed=Number.isFinite(opts.seed)?opts.seed|0:1,f=colonistFeatures(seed,age),outfit=colonistOutfit(job);
+  const seed=Number.isFinite(opts.seed)?opts.seed|0:1,f=colonistFeatures(seed,age,opts.sex),outfit=colonistOutfit(job);
   if (typeof opts.skin === 'string' && /^#[0-9a-f]{6}$/i.test(opts.skin)) f.skin = opts.skin;
   const mood=clamp(Number.isFinite(opts.mood)?opts.mood:60,0,100),tired=clamp((50-mood)/45),happy=clamp((mood-55)/45);
   const dose=clamp(((Number.isFinite(opts.dose)?opts.dose:0)-250)/1750),elder=age==='elder',child=age==='child';

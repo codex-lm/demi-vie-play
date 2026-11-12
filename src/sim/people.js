@@ -96,7 +96,9 @@ export function initializePeople(sim) {
   }
   const first = sim.colonists.find((colonist) => colonist.id === 0);
   const second = sim.colonists.find((colonist) => colonist.id === 1);
-  if (first && second && first.health > 0 && second.health > 0) {
+  // Old games keep their historical couple, including when loading an old save.
+  // Opening games have a couple chosen once; never recreate it on save/load.
+  if (!sim.seededIdentities && first && second && first.health > 0 && second.health > 0) {
     first.coupleId ??= 1;
     second.coupleId ??= 0;
     first.relations[1] = Math.max(85, first.relations[1]);

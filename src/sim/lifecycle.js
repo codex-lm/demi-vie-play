@@ -15,7 +15,7 @@ const isAlive = (colonist) => colonist && !colonist.dead && colonist.health > 0;
 const CRISIS_BEHAVIORS = Object.freeze(['isolate', 'argue', 'refuseWork']);
 
 function usableRoom(room) {
-  return room && room.state === 'fitted' && !room.disabled
+  return room && room.state === 'fitted' && !room.disabled && !room.evacuation
     && (room.floodRatio ?? 0) <= WATER.FLOOD_UNUSABLE_RATIO;
 }
 

@@ -1,8 +1,9 @@
+import { evacuatedAt } from './evacuation.js';
 import { recipeDefinition } from '../data/recipes.js';
 import { ROOM_DEFS, foodInputsPerDay } from '../data/rooms.js';
 import { EXODUS } from '../data/surface.js';
 import { headSubmerged } from './immersion.js';
-import { isWalkableIn, navigationComponent, navigationTargets, rebuildNav } from './nav.js';
+import { findPath, isWalkableIn, navigationComponent, navigationTargets, rebuildNav } from './nav.js';
 
 export function createStock(id, x, y, resources = {}) {
   return { id, x, y, resources: { ...resources } };
@@ -77,6 +78,7 @@ export function spendResources(sim, cost, localStock = null) {
 }
 
 export function stockNavigationTargets(sim, stock, origin = null) {
+  if (sim.excavation(stock.excavationId)?.evacuation || evacuatedAt(sim, stock.x, stock.y)) return [];
   const targets = navigationTargets(sim, stock.x, stock.y);
   if (stock.excavationId === undefined || stock.excavationId === null) {
     return targets.filter((target) => !headSubmerged(sim, target.x, target.y));
@@ -126,8 +128,10 @@ export function stockReachable(sim, colonist, stock) {
   const y = Math.round(colonist.y);
   const component = navigationComponent(sim, x, y);
   if (component < 0) return false;
-  return stockNavigationTargets(sim, stock, colonist)
-    .some((target) => navigationComponent(sim, target.x, target.y) === component);
+  const targets = stockNavigationTargets(sim, stock, colonist);
+  if (sim.evacuationCount) return targets.some(target => target.x === x && target.y === y)
+    || findPath(sim, colonist, targets).length > 0;
+  return targets.some((target) => navigationComponent(sim, target.x, target.y) === component);
 }
 
 export function stocksConnected(sim, source, destination) {

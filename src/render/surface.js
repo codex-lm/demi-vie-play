@@ -2,15 +2,22 @@
 import { drawSurface as drawArtSurface, drawSurfaceStructure as drawArtStructure, drawRadioWaves } from '../../art/surface.js';
 import { drawRoomProps } from '../../art/props.js';
 import { CIVIDIS } from './overlayPalette.js';
+import { TIME } from '../data/balance.js';
+import { DEMIES } from '../data/demies.js';
+import { demieCount } from '../sim/demies.js';
 
 const mix = (a, b, amount) => a.map((value, index) => Math.round(value + (b[index] - value) * amount));
 
-/** The annual sky colour is a game rule (SPEC 13); seasonal detail remains art. */
+/** Keep SPEC 13's annual hues, with a small permanent lift at every Demie. */
 export function surfaceSkyColors(years = 0) {
   const top = years < 1 ? mix([83, 75, 64], [103, 108, 108], Math.max(0, years))
     : years < 3 ? [103, 108, 108] : [137, 169, 184];
   const bottom = years < 1 ? [132, 124, 103] : years < 3 ? [145, 149, 149] : [180, 207, 220];
-  return { top, bottom };
+  const tick = Math.round(Math.max(0, years) * TIME.DAYS_PER_YEAR * TIME.TICKS_PER_DAY);
+  const lift = .12 * demieCount(tick) / DEMIES.COUNT;
+  // Neutral light preserves the brown / gray / pale-blue progression. This is
+  // a static tint, so reduced motion needs no animation or special timer.
+  return { top: mix(top, [245, 245, 245], lift), bottom: mix(bottom, [245, 245, 245], lift) };
 }
 
 export function drawSurface(ctx, rect, cellPx, opts) {

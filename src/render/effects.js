@@ -1,4 +1,4 @@
-import { HEAT, STRUCTURE, TIME, WORK } from '../data/balance.js';
+import { HEAT, STRUCTURE, WORK } from '../data/balance.js';
 import { waterLevelAt } from './water.js';
 import { RADIATION } from '../data/surface.js';
 import { drawEffect } from '../../art/effects.js';
@@ -7,6 +7,8 @@ import { drawGameSouvenir, OBJECTIVE_ART } from './m6-symbols.js';
 import { drawObjectiveIcon, drawInkCheck } from '../../art/m6/notebook.js';
 import { colorblindEnabled, CIVIDIS } from './overlayPalette.js';
 import { interpolatedColonistPosition } from './colonists.js';
+import { SPEED, ticksPerSecond } from '../data/speeds.js';
+import { rescueKnockFrame, rescueSignalPosition, rescueStatus } from '../sim/rescueSignals.js';
 
 const TAU = Math.PI * 2;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -157,8 +159,9 @@ function collapseTimeline(game, now) {
     return state;
   }
   if (state.last !== last || state.tick !== sim.tick) {
-    const speed = Math.max(1, game.speed || game.previousSpeed || 1);
-    const durationTicks = TIME.TICKS_PER_SECOND_AT_X1 * speed * 2.2;
+    // The cloud lasts 2.2 real seconds at the current speed; a paused game
+    // that never ran counts as "Travailler" (the former x1).
+    const durationTicks = ticksPerSecond(game.speed || game.previousSpeed || SPEED.WORK) * 2.2;
     for (let index = events.length - 1; index >= 0; index--) {
       const event = events[index];
       if (state.seen.has(event)) break;
@@ -462,7 +465,7 @@ export function drawWading(ctx, game, view) {
     const prevY = colonist.prevY ?? colonist.y;
     if (Math.abs(colonist.x - prevX) + Math.abs(colonist.y - prevY) < 1e-5) continue;
     // Same interpolation as the silhouette, so the ripples stay at its feet.
-    const { x: worldX, y: worldY } = interpolatedColonistPosition(colonist, alpha);
+    const { x: worldX, y: worldY } = interpolatedColonistPosition(colonist, alpha, game.sim);
     const level = waterLevelAt(world, worldX, worldY);
     if (level < WADING_MIN_LEVEL || !world.isVisible(Math.round(worldX), Math.round(worldY))) continue;
     const x = view.sx(worldX + 0.5);
@@ -519,6 +522,7 @@ export function drawEffects(ctx, game, view) {
 // Fresh broken edges catch the miner's lamp. Keep only these small highlights
 // above the darkness mask; smoke, hazards, and the inhabitants remain shaded.
 export function drawExcavationHighlights(ctx, game, view) {
+  drawRescueSignals(ctx, game, view);
   for (const burst of excavationFeedback(game, game.renderTime ?? view.now).bursts) {
     if (burst.event.type === 'creak') {
       const room = game.sim.excavation(burst.event.excavationId);
@@ -538,5 +542,38 @@ export function drawExcavationHighlights(ctx, game, view) {
       }
     }
     if (!['dust', 'danger', 'creak', 'crack'].includes(burst.event.type)) drawImpactBurst(ctx, game, view, burst);
+  }
+}
+
+/** Listening marks stay above the darkness mask and never rely on audio.
+ * In pause or reduced motion the same two curves remain completely still. */
+export function drawRescueSignals(ctx, game, view) {
+  for (const room of game.sim.excavations ?? []) {
+    if (!room.trappedColonistIds?.length || !excavationVisible(room, view)) continue;
+    const status = rescueStatus(game.sim, room);
+    if (!status) continue;
+    const source = rescueSignalPosition(room);
+    if (game.sim.world?.isVisible && !game.sim.world.isVisible(Math.floor(source.x), Math.floor(source.y))) continue;
+    const stroke = rescueKnockFrame(status, game.sim.tick + (view.alpha ?? 0));
+    const still = game.options?.reduceMotion || ![SPEED.LIVE, SPEED.WORK].includes(game.speed);
+    const progress = still || !stroke.active ? 0 : stroke.progress;
+    const cell = view.cellSize, x = view.sx(source.x), y = view.sy(source.y);
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1.3, cell * 0.055);
+    // A permanent dark outline keeps the marker legible over either rubble
+    // palette. A stroke expands and fades only during the corresponding knock.
+    for (const outline of [true, false]) {
+      ctx.strokeStyle = outline ? '#172124' : colorblindEnabled(game) ? CIVIDIS[2] : '#efd59b';
+      ctx.lineWidth = Math.max(1.3, cell * 0.055) * (outline ? 2.6 : 1);
+      ctx.globalAlpha = still ? 0.95 : stroke.active ? 1 - progress * 0.55 : 0.65;
+      for (const offset of [0.22, 0.48]) {
+        const distance = cell * (offset + progress * 0.4);
+        ctx.beginPath();
+        ctx.moveTo(x + distance, y - cell * 0.25);
+        ctx.quadraticCurveTo(x + distance + cell * 0.18, y, x + distance, y + cell * 0.25);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
 }

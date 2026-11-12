@@ -6,7 +6,7 @@ import { insideExcavation } from './networks.js';
 export function usableActivityRoom(room, roomType = null) {
   return room && (!roomType || room.roomType === roomType)
     && (room.state === 'fitted' || room.state === 'dug' || room.initial)
-    && room.state !== 'collapsed' && !room.disabled
+    && room.state !== 'collapsed' && !room.disabled && !room.evacuation
     && (room.floodRatio ?? 0) <= WATER.FLOOD_UNUSABLE_RATIO;
 }
 

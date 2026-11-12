@@ -588,6 +588,10 @@ export function createColonyExport(sim, projection = null) {
     radioNeighbors: exportRadioNeighbors(sim),
     survivingNeighbors: exportSurvivingNeighbors(sim),
     score: heritageScore(sim, projected),
+    ...(sim.veillee ? { veillee: {
+      marks: [...sim.veillee.marks],
+      inscriptions: sim.veillee.inscriptions.map(inscription => ({ ...inscription })),
+    } } : {}),
   };
 }
 

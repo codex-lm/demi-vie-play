@@ -2,30 +2,33 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Demi-Vie</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <!-- The stored palette, before the first paint; src/main.js checks it again once the modules are loaded. -->
+  <script>try{var t=JSON.parse(localStorage.getItem('demi-vie-options-v1')||'{}').theme;document.documentElement.setAttribute('data-theme',t==='shelter'||t==='soot'?t:'blueprint')}catch(e){}</script>
+  <link rel="stylesheet" href="./src/ui/themes.css">
   <link rel="stylesheet" href="./src/ui/ui.css">
   <link rel="stylesheet" href="./src/render/integ5.css">
   <link rel="stylesheet" href="./src/ui/m6b.css">
   <style>
-    .reserve-panel { justify-self: center; display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 0; border: 1px solid var(--line); border-radius: 6px; background: rgba(18, 26, 29, .96); box-shadow: 0 6px 20px rgba(0, 0, 0, .3); pointer-events: auto; }
-    .reserve-title { display: flex; align-items: center; padding: 5px 9px; color: var(--amber-light); font-size: 9px; letter-spacing: .05em; white-space: nowrap; }
+    .reserve-panel { justify-self: center; display: flex; flex-wrap: wrap; justify-content: center; align-items: stretch; gap: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-glass); box-shadow: 0 6px 20px var(--shadow-soft); pointer-events: auto; }
+    .reserve-title { display: flex; align-items: center; padding: 5px 9px; color: var(--accent-strong); font-size: 9px; letter-spacing: .05em; white-space: nowrap; }
     .reserve-item { position: relative; min-width: 82px; padding: 5px 9px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: transparent; text-align: left; }
-    .reserve-item span { display: block; color: var(--muted); font-size: 9px; }
+    .reserve-item span { display: block; color: var(--text-muted); font-size: 9px; }
     .reserve-item strong { display: block; margin-top: 1px; font-size: 12px; }
-    .reserve-item.green strong, .threat-link.green { color: var(--green); }
-    .reserve-item.yellow strong, .threat-link.yellow { color: var(--yellow); }
-    .reserve-item.red strong, .threat-link.red { color: var(--red); }
-    .reserve-item.active { background: rgba(214, 173, 104, .13); }
+    .reserve-item.green strong, .threat-link.green { color: var(--safe); }
+    .reserve-item.yellow strong, .threat-link.yellow { color: var(--warning); }
+    .reserve-item.red strong, .threat-link.red { color: var(--danger); }
+    .reserve-item.active { background: var(--accent-tint); }
     .shelter-alert { justify-self: center; width: min(570px, 100%); pointer-events: auto; }
-    .shelter-alert button { width: 100%; padding: 7px 12px; border-left-width: 4px; background: rgba(30, 28, 23, .96); box-shadow: 0 5px 18px rgba(0, 0, 0, .35); font-size: 11px; text-align: left; }
-    .shelter-alert.warning button { border-left-color: var(--yellow); color: #efd18f; }
-    .shelter-alert.danger button, .shelter-alert.error button { border-left-color: var(--red); color: #f1a18d; background: rgba(48, 27, 25, .97); }
+    .shelter-alert button { width: 100%; padding: 7px 12px; border-left-width: 4px; background: var(--warning-deep); box-shadow: 0 5px 18px var(--shadow-soft); font-size: 11px; text-align: left; }
+    .shelter-alert.warning button { border-left-color: var(--warning); color: var(--warning-text); }
+    .shelter-alert.danger button, .shelter-alert.error button { border-left-color: var(--danger); color: var(--danger-text); background: var(--danger-deep); }
     .fit-threats { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px; }
-    .threat-link { padding: 5px 4px; border-color: currentColor; background: rgba(15, 23, 26, .85); font-size: 9px; }
-    #build-menu option:disabled { color: #777d78; }
+    .threat-link { padding: 5px 4px; border-color: currentColor; background: var(--panel-deep-glass); font-size: 9px; }
+    #build-menu option:disabled { color: var(--text-disabled); }
     @media (max-width: 1450px) {
       .reserve-title { max-width: 88px; white-space: normal; }
       .reserve-item { min-width: 74px; padding-right: 7px; padding-left: 7px; }

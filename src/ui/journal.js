@@ -2,10 +2,14 @@ import { TIME } from '../data/balance.js';
 import { POI_TEXT } from '../data/poiText.js';
 import { RADIO_TEXT } from '../data/radioText.js';
 import { WEATHER } from '../data/surface.js';
+import { LEFT_OUTSIDE_ITEMS } from '../data/leftOutside.js';
 import { getLanguage, STR, tr } from '../data/strings.fr.js';
 import { calendarDate, excavationDisplayName } from './models.js';
 import { formatDose, formatNumber } from './tooltips.js';
 import { localizeStoryJournalParams } from './storyLocalization.js';
+import { visibleJournalEntries } from './demies.js';
+import { namedDeathMessage, personalizeJournalNarrative } from './journalPeople.js';
+import { rescueJournal } from '../sim/rescueNarrative.js';
 
 function entryTime(tick) {
   const day = Math.floor(tick / TIME.TICKS_PER_DAY) + 1;
@@ -35,6 +39,7 @@ const DAMAGE_CAUSE_KEYS = Object.freeze({ air: 'asphyxia', starvation: 'malnutri
 const WEATHER_NAMES = Object.freeze({ rain: 'Rain', blackRain: 'BlackRain', dustStorm: 'DustStorm', clearing: 'Clearing', clear: 'Clearing' });
 const JOURNAL_DEFAULTS = Object.freeze({
   lawId: 'sharedMeals', nodeId: 'whitewash', name: '—', parents: '—', a: '—', b: '—',
+  rescuer: '—', lastKnockTick: null,
   behavior: 'refuseWork', cause: 'morale_neglected', remonteurs: '—', profonds: '—', faction: 'remonteurs',
   days: 1, amount: 1, resource: 'filters', effects: '', remedy: '', level: 0,
   dose: 0, site: 'supermarket', summary: '—', hours: 12, type: 'antenna', value: 0,
@@ -42,6 +47,7 @@ const JOURNAL_DEFAULTS = Object.freeze({
   signals: 0, radius: 40, energy: 8, meters: 3, duration: 20,
   defense: 0, attack: 0, stolen: 0, injuries: 0, otherName: '—',
   material: 'timber',
+  outsideId: '',
   choice: '—', text: '—', title: '—', source: 'storyteller', from: 0, donePhraseKey: 'm6ObjectiveDigRoomDone',
 });
 
@@ -76,6 +82,8 @@ export function formatRadioMessage(message) {
     if (params.neighbor) params.neighbor = localizeSavedLabel(params.neighbor, RADIO_LABEL_KEYS);
     if (params.loot) params.loot = radioLoot(params.loot);
   }
+  const outside = LEFT_OUTSIDE_ITEMS.find((item) => item.id === params.siteId || item.id === params.site);
+  if (outside) params.site = tr(outside.titleKey);
   return tr(message.textKey, params);
 }
 
@@ -112,6 +120,8 @@ function localizeSavedJournalParams(entry, params) {
 }
 
 function journalParameter(code, key, value, excavations) {
+  if (key === 'outsideId') return tr(LEFT_OUTSIDE_ITEMS.find((item) => item.id === value)?.titleKey ?? 'outsideTitle');
+  if (key === 'lastKnockTick') return Number.isFinite(value) && value >= 0 ? entryTime(value) : tr('unknown');
   if (key === 'material') return tr(String(value));
   if (key === 'roomType') return tr(String(value)).toLocaleLowerCase(getLanguage());
   if (key === 'lawId') return tr(`law_${value}`);
@@ -119,7 +129,7 @@ function journalParameter(code, key, value, excavations) {
   if (key === 'behavior' || key === 'faction') return tr(String(value));
   if (key === 'cause') return tr(String(value));
   if (key === 'resource') return tr(String(value)).toLocaleLowerCase(getLanguage());
-  if (key === 'site' || key === 'siteId') return tr(`site_${value}`);
+  if (key === 'site' || key === 'siteId') return tr(LEFT_OUTSIDE_ITEMS.find((item) => item.id === value)?.titleKey ?? `site_${value}`);
   if (key === 'weather' || key === 'type') return tr(String(value));
   if (key === 'loot' || key === 'yields') return resourceSummary(value);
   if (key === 'summary' && value && typeof value === 'object') return resourceSummary(value.loot ?? value);
@@ -173,7 +183,20 @@ function prepareWeather(entry, params, story) {
 }
 
 export function formatJournalEntry(entry, excavations = [], options = {}) {
+  if (entry.code === 'veilleeInscription') {
+    return tr('veilleeInscription', { day: entry.params?.day, words: tr(entry.params?.key) });
+  }
+  if (entry.code === 'eventOutsideStory') {
+    const recovered = (entry.params?.recoveredKeys ?? []).map((key) => tr(key));
+    const left = (entry.params?.leftKeys ?? []).map((key) => tr(key));
+    return tr(entry.code, {
+      recovered: recovered.length ? tr('outsideStoryRecovered', { items: recovered.join(', ') }) : tr('outsideNothingRecovered'),
+      left: left.length ? tr('outsideStoryLeft', { items: left.join(', ') }) : tr('outsideNothingLeft'),
+    });
+  }
   if (entry.code === 'eventResource') return null;
+  const namedDeath = namedDeathMessage(options.sim, entry);
+  if (namedDeath !== null) return namedDeath;
   const story = Boolean(options.story);
   if (story && entry.code.startsWith('eventWeather')
     && !entry.params?.consequence && !entry.params?.consequences && !entry.params?.deaths) return null;
@@ -200,7 +223,7 @@ export function formatJournalEntry(entry, excavations = [], options = {}) {
     const formatted = Object.fromEntries(Object.entries(params)
       .map(([key, value]) => [key, journalParameter(entry.code, key, value, excavations)]));
     const code = story && Object.hasOwn(STR, `${entry.code}Story`) ? `${entry.code}Story` : entry.code;
-    return tr(code, formatted);
+    return personalizeJournalNarrative(options.sim, entry, tr(code, formatted));
   }
   const params = entry.params ?? {};
   const excavation = excavations.find((item) => item.id === (params.excavationId ?? params.id));
@@ -227,7 +250,7 @@ export class Journal {
   onClick(event) {
     const button = event.target.closest('button[data-entry-id]');
     if (!button) return;
-    const entry = this.game.sim.journal.find((item) => item.id === Number(button.dataset.entryId));
+    const entry = rescueJournal(this.game.sim).find((item) => String(item.id) === button.dataset.entryId);
     if (!entry) return;
     if (entry.focus) this.game.focus(entry.focus.x, entry.focus.y);
     if (entry.code === 'eventDeath') {
@@ -245,7 +268,9 @@ export class Journal {
 
   refresh(force = false) {
     if (!this.root) return;
-    const entries = this.game.sim.journal.filter((entry) => entry.code !== 'eventResource');
+    // Les Demies et le récit des secours vivent hors du journal sauvegardé : on les réunit à l'affichage.
+    const entries = [...visibleJournalEntries(this.game.sim), ...(this.game.sim.rescueNarrative?.entries ?? [])]
+      .sort((a, b) => a.tick - b.tick || (typeof a.id === 'number' ? -1 : 1) - (typeof b.id === 'number' ? -1 : 1));
     const newest = entries.at(-1)?.id ?? -1;
     if (!force && newest === this.lastEntryId) return;
     this.lastEntryId = newest;
@@ -256,15 +281,15 @@ export class Journal {
     const list = document.createElement('div');
     list.className = 'journal-list';
     for (const entry of entries.slice(-7).reverse()) {
-      const button = document.createElement('button');
-      button.type = 'button';
+      const button = document.createElement(entry.level === 'demie' ? 'div' : 'button');
+      if (entry.level !== 'demie') button.type = 'button';
       button.className = `journal-entry ${entry.level}`;
       button.dataset.entryId = String(entry.id);
-      button.title = tr('journalFocus');
+      if (entry.level !== 'demie') button.title = tr('journalFocus');
       const time = document.createElement('time');
       time.textContent = entryTime(entry.tick);
       const message = document.createElement('span');
-      message.textContent = formatJournalEntry(entry, this.game.sim.excavations);
+      message.textContent = formatJournalEntry(entry, this.game.sim.excavations, { sim: this.game.sim });
       button.append(time, message);
       list.append(button);
     }

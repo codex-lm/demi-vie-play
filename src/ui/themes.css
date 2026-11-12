@@ -1,0 +1,171 @@
+/* Interface palettes. One block per theme, the same variables in each.
+   <html data-theme="…"> picks the block (src/ui/m6Shell.js applyTheme); without the
+   attribute the page shows "shelter", the look the game has always had.
+   Scope: the HTML interface only. The canvas keeps its own colours (see handoff/THEMES.md).
+   tests/themes.test.mjs reads this file: every theme defines every variable, and the
+   main text and status pairs keep their contrast. */
+
+/* Abri — cream and amber on a very dark green-blue. */
+:root, :root[data-theme="shelter"] {
+  --bg: #0c1114;
+  --panel: #161d20;
+  --panel-soft: #222d31;
+  --panel-deep: #0f171a;
+  --line: #463c2b;
+  --line-strong: #59615c;
+  --text: #e6d7b6;
+  --text-soft: #c8cec7;
+  --text-muted: #a6b4a5;
+  --accent: #e7b66c;
+  --accent-strong: #f5e7cc;
+  --accent-ink: #171b19;
+  --safe: #83b894;
+  --warning: #ddb45e;
+  --danger: #d27662;
+  --radiation: #f5e7cc;
+  --water: #a3d8df;
+  --paper: #e4d5b1;
+  --paper-ink: #443f31;
+  --shadow: #000000;
+  --focus: #f5e7cc;
+}
+
+/* Bleu de plan — the engineer's blueprint of the shelter, cold and precise. */
+:root[data-theme="blueprint"] {
+  --bg: #0a1320;
+  --panel: #13213a;
+  --panel-soft: #1a2c4a;
+  --panel-deep: #0d1829;
+  --line: #354864;
+  --line-strong: #5f7797;
+  --text: #e8eef6;
+  --text-soft: #c3cfde;
+  --text-muted: #9db0c8;
+  --accent: #7cc0ff;
+  --accent-strong: #d3e9ff;
+  --accent-ink: #0a1320;
+  --safe: #3fc4a8;
+  --warning: #f4d24a;
+  --danger: #f46a50;
+  --radiation: #c3abf7;
+  --water: #8fe0ee;
+  --paper: #e4d5b1;
+  --paper-ink: #443f31;
+  --shadow: #02060d;
+  --focus: #ffffff;
+}
+
+/* Suie et craie — the interface has no colour of its own; colour only says something. */
+:root[data-theme="soot"] {
+  --bg: #121110;
+  --panel: #1d1b19;
+  --panel-soft: #2a2725;
+  --panel-deep: #161413;
+  --line: #423f3a;
+  --line-strong: #6f6a62;
+  --text: #ecebe6;
+  --text-soft: #cbc8c1;
+  --text-muted: #a39f97;
+  --accent: #d8d4cb;
+  --accent-strong: #f7f6f2;
+  --accent-ink: #121110;
+  --safe: #58b8a0;
+  --warning: #f0cf45;
+  --danger: #ee6349;
+  --radiation: #c9a2e8;
+  --water: #8ccbe0;
+  --paper: #e4d5b1;
+  --paper-ink: #443f31;
+  --shadow: #000000;
+  --focus: #ffffff;
+}
+
+/* Colonist activity legend: the same four hues in every theme (repair is --safe). */
+:root {
+  --activity-dig: #df9b56;
+  --activity-haul: #72a9c7;
+  --activity-rest: #b29acb;
+}
+
+/* Derived tints. First the values every browser understands, then the real mixes
+   where color-mix() exists (Chrome and Edge 111, Firefox 113, Safari 16.2). */
+:root {
+  --panel-glass: var(--panel);
+  --panel-deep-glass: var(--panel-deep);
+  --inset: transparent;
+  --scrim: var(--bg);
+  --line-soft: var(--line);
+  --text-wash: transparent;
+  --text-disabled: var(--text-muted);
+  --accent-wash: transparent;
+  --accent-tint: transparent;
+  --accent-line: var(--accent);
+  --accent-rule: var(--accent);
+  --control-hover: var(--panel-soft);
+  --control-active: var(--panel-soft);
+  --safe-wash: transparent;
+  --safe-line: var(--safe);
+  --warning-wash: transparent;
+  --warning-line: var(--warning);
+  --warning-text: var(--warning);
+  --warning-deep: var(--panel-deep);
+  --danger-wash: transparent;
+  --danger-line: var(--danger);
+  --danger-text: var(--danger);
+  --danger-deep: var(--panel-deep);
+  --water-wash: transparent;
+  --water-line: var(--water);
+  --water-panel: var(--panel);
+  --paper-shade: var(--paper);
+  --paper-edge: var(--paper);
+  --paper-line: var(--paper-ink);
+  --paper-ink-soft: var(--paper-ink);
+  --shadow-soft: transparent;
+  --shadow-deep: transparent;
+}
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  :root {
+    --panel-glass: color-mix(in srgb, var(--panel) 96%, transparent);
+    --panel-deep-glass: color-mix(in srgb, var(--panel-deep) 95%, transparent);
+    --inset: color-mix(in srgb, var(--bg) 40%, transparent);
+    --scrim: color-mix(in srgb, var(--bg) 75%, transparent);
+    --line-soft: color-mix(in srgb, var(--line) 45%, transparent);
+    --text-wash: color-mix(in srgb, var(--text) 5%, transparent);
+    --text-disabled: color-mix(in srgb, var(--text-muted) 65%, var(--panel-soft));
+    --accent-wash: color-mix(in srgb, var(--accent) 7%, transparent);
+    --accent-tint: color-mix(in srgb, var(--accent) 12%, transparent);
+    --accent-line: color-mix(in srgb, var(--accent) 40%, transparent);
+    --accent-rule: color-mix(in srgb, var(--accent) 75%, transparent);
+    --control-hover: color-mix(in srgb, var(--accent) 17%, var(--accent-ink));
+    --control-active: color-mix(in srgb, var(--accent) 25%, var(--accent-ink));
+    --safe-wash: color-mix(in srgb, var(--safe) 6%, transparent);
+    --safe-line: color-mix(in srgb, var(--safe) 50%, transparent);
+    --warning-wash: color-mix(in srgb, var(--warning) 8%, transparent);
+    --warning-line: color-mix(in srgb, var(--warning) 45%, transparent);
+    --warning-text: color-mix(in srgb, var(--warning) 65%, var(--text));
+    --warning-deep: color-mix(in srgb, var(--warning) 9%, var(--bg));
+    --danger-wash: color-mix(in srgb, var(--danger) 8%, transparent);
+    --danger-line: color-mix(in srgb, var(--danger) 50%, transparent);
+    --danger-text: color-mix(in srgb, var(--danger) 65%, var(--text));
+    --danger-deep: color-mix(in srgb, var(--danger) 18%, var(--bg));
+    --water-wash: color-mix(in srgb, var(--water) 9%, transparent);
+    --water-line: color-mix(in srgb, var(--water) 30%, transparent);
+    --water-panel: color-mix(in srgb, var(--water) 9%, var(--panel));
+    --paper-shade: color-mix(in srgb, var(--paper) 88%, var(--paper-ink));
+    --paper-edge: color-mix(in srgb, var(--paper) 68%, var(--paper-ink));
+    --paper-line: color-mix(in srgb, var(--paper) 45%, var(--paper-ink));
+    --paper-ink-soft: color-mix(in srgb, var(--paper-ink) 90%, var(--paper));
+    --shadow-soft: color-mix(in srgb, var(--shadow) 32%, transparent);
+    --shadow-deep: color-mix(in srgb, var(--shadow) 52%, transparent);
+  }
+}
+
+/* Former names, kept so that styles written before the themes still resolve. */
+:root {
+  --amber: var(--accent);
+  --amber-light: var(--accent-strong);
+  --muted: var(--text-muted);
+  --green: var(--safe);
+  --yellow: var(--warning);
+  --red: var(--danger);
+}

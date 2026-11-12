@@ -3,6 +3,9 @@ import {
   collectStoryFacts,
   selectExtraStorySentences,
 } from './endStoryExtra.js';
+import { LEFT_OUTSIDE_ITEMS } from '../data/leftOutside.js';
+import { TIME } from '../data/balance.js';
+import { VEILLEE } from '../data/veillee.js';
 
 const COLD_CAUSES = new Set(['cold', 'hypothermia']);
 
@@ -98,12 +101,23 @@ function childSentences(sim, children) {
   return individual;
 }
 
+function outsideSentences(sim) {
+  if (!sim.leftOutside) return [];
+  const items = sim.leftOutside.items ?? [];
+  const keyFor = (item) => LEFT_OUTSIDE_ITEMS.find((definition) => definition.id === item.id)?.titleKey;
+  return [descriptor('eventOutsideStory', sim.tick, {
+    recoveredKeys: items.filter((item) => item.status === 'recovered').map(keyFor).filter(Boolean),
+    leftKeys: items.filter((item) => item.status !== 'recovered').map(keyFor).filter(Boolean),
+  })];
+}
+
 export function buildEndStory(sim, entries, projection) {
   const facts = collectStoryFacts(sim, entries);
   const {
     selectedEntries, laws, deaths, children, dilemmas, neighbors, souvenirs,
   } = facts;
   const nativeSentences = [
+    ...outsideSentences(sim),
     lawSentence(sim, laws),
     deathSentence(sim, deaths),
     dilemmaSentence(sim, dilemmas),
@@ -120,6 +134,11 @@ export function buildEndStory(sim, entries, projection) {
   if (defeat && !sentences.some((sentence) => sentence.code === defeat.code)) {
     sentences[sentences.length - 1] = descriptor(defeat.code, defeat.tick, defeat.params);
   }
+  const inscriptions = sim.veillee?.inscriptions?.map(({ day, key }) => ({ day, key })) ?? [];
+  for (const inscription of inscriptions) {
+    sentences.push(descriptor('veilleeInscription', (inscription.day - 1) * TIME.TICKS_PER_DAY
+      + VEILLEE.HOUR * TIME.TICKS_PER_HOUR, inscription));
+  }
   return {
     sentences,
     entries: clone(selectedEntries, []),
@@ -133,5 +152,6 @@ export function buildEndStory(sim, entries, projection) {
     dilemmas,
     neighbors,
     souvenirs,
+    ...(sim.veillee ? { inscriptions } : {}),
   };
 }

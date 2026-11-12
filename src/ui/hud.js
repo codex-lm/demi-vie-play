@@ -1,16 +1,21 @@
-import { ALERTS, CULTIVATION, TIME } from '../data/balance.js';
+import { ALERTS, CULTIVATION } from '../data/balance.js';
 import { resourceTotals } from '../sim/resources.js';
 import { reserveTrendSnapshot, restoreReserveTrend, waterChainModel } from '../sim/waterChain.js';
 import { foodSpoilageModel } from '../sim/rooms.js';
 import { tr } from '../data/strings.fr.js';
+import { daySeconds, SPEED_STEPS, speedStep, ticksPerSecond } from '../data/speeds.js';
 import { BuildMenu } from './buildMenu.js';
-import { formatJournalEntry, Journal } from './journal.js';
+import { Journal } from './journal.js';
 import { PreviewPanel, SelectionPanel } from './panels.js';
-import { formatDoseRate, formatNumber, Tooltip } from './tooltips.js';
-import { calendarDate, effectiveRoomType, filterSeverity, formatReserveDays, latestAlertModel, RESERVE_KEYS, reserveDaysLabel, reserveStatusModel, resourceStatusModel, surfaceHudModel, waterSeverity } from './models.js';
+import { formatNumber, Tooltip } from './tooltips.js';
+import { calendarDate, effectiveRoomType, filterSeverity, formatReserveDays, latestAlertModel, RESERVE_KEYS, reserveDaysLabel, reserveStatusModel, resourceStatusModel, waterSeverity } from './models.js';
 import { M4Panels } from './m4Panels.js';
 import { M5Panels } from './m5Panels.js';
 import { M6Panels } from './m6Panels.js';
+import { DemiesMoment, demiesHudHtml, demiesHudView } from './demies.js';
+import { openTokenBoard } from './tokenBoard.js';
+import { rescueAlertModel } from './rescuePanels.js';
+import { veilleeButtonHelp } from './veillee.js';
 
 const OVERLAYS = ['none', 'constraints', 'temperature', 'air', 'water', 'radiation', 'power', 'deposits'];
 const RESOURCE_KEYS = ['food', 'water', 'fuel', 'stone', 'wood', 'metal', 'cement', 'coal'];
@@ -19,6 +24,41 @@ const COLONIST_SLOTS = 12;
 const ACTIVITY_KEYS = Object.freeze({ dig: 'activityDig', haul: 'activityHaul', repair: 'activityRepair', crank: 'activityCrank', rest: 'activityRest', idle: 'activityIdle', dead: 'activityDead' });
 // Réserves dont le bouton porte une deuxième ligne (même style que l'eau).
 const RESERVE_DETAILS = new Set(['water', 'filters']);
+
+/** "10 min", "60 s": the real time one game day lasts at this speed. */
+export function speedDayLength(speed) {
+  const seconds = daySeconds(speed);
+  return seconds >= 120 && seconds % 60 === 0
+    ? tr('speedDayMinutes', { count: formatNumber(seconds / 60, true) })
+    : tr('speedDaySeconds', { count: formatNumber(seconds) });
+}
+
+/** Name, day length and key of a speed button: its tooltip and spoken label. */
+export function speedButtonHelp(speed) {
+  const step = speedStep(speed);
+  if (!step) return '';
+  return tr('speedButtonHelp', { name: tr(step.nameKey), duration: speedDayLength(speed), key: SPEED_STEPS.indexOf(step) + 1 });
+}
+
+// Width of the HUD, in its own pixels (window width divided by the interface
+// scale), from which the five speed names fit beside the resources. A media
+// query cannot decide this: it sees the window, not the interface scale.
+const SPEED_NAMES_MIN_HUD_WIDTH = 1440;
+
+/** Whether the speed buttons have room for their names (else they show their key). */
+export function speedNamesFit(windowWidth, textScale = 100) {
+  const width = Number(windowWidth);
+  const scale = Number(textScale) > 0 ? Number(textScale) : 100;
+  return !(width > 0) || width / (scale / 100) >= SPEED_NAMES_MIN_HUD_WIDTH;
+}
+
+/** The five named speed buttons. A HUD too narrow shows the key instead of the name. */
+export function speedButtonsHtml() {
+  return SPEED_STEPS.map((step, index) => {
+    const help = speedButtonHelp(step.speed);
+    return `<button type="button" data-speed="${step.speed}" title="${help}" aria-label="${help}"><span class="speed-key" aria-hidden="true">${index + 1}</span><span class="speed-name">${tr(step.nameKey)}</span></button>`;
+  }).join('');
+}
 
 function signedNumber(value) {
   const rounded = Math.round(Number(value) || 0);
@@ -143,6 +183,7 @@ export class UI {
     this.selectionElapsed = 0;
     this.toastTimer = null;
     this.valueNodes = {};
+    this.demies = new DemiesMoment(game);
     this.buildHud();
     this.root?.addEventListener('click', (event) => this.onHudClick(event));
     this.buildOverlayControls();
@@ -161,21 +202,22 @@ export class UI {
   buildHud() {
     if (!this.root) return;
     this.root.innerHTML = `<div class="brand"><h1>${tr('title')}</h1><span>${tr('subtitle')}</span></div>
-      <div class="date-block"><span class="eyebrow">${tr('speed')}</span><strong data-value="date"></strong></div>
-      <div class="speed-controls" role="group" aria-label="${tr('speed')}" title="${tr('pauseHint')}">
+      <div class="date-block"><span class="eyebrow" data-value="speedName">${tr('speed')}</span><strong data-value="date"></strong></div>
+      <div class="speed-controls${this.speedCompact ? ' compact' : ''}" role="group" aria-label="${tr('speed')}" title="${tr('pauseHint')}">
         <button type="button" data-speed="0" aria-label="${tr('pause')}"><span class="pause-symbol" aria-hidden="true"></span><span class="speed-label">${tr('pause')}</span></button>
-        ${[1, 3, 10, 30].map((speed) => `<button type="button" data-speed="${speed}">×${speed}</button>`).join('')}
+        ${speedButtonsHtml()}
+        <button type="button" data-until-veillee ${this.game.sim.veillee ? '' : 'hidden'} title="${veilleeButtonHelp(this.game.sim)}">${tr('veilleeUntil')}</button>
       </div>
       <div class="resource-strip" aria-label="${tr('resources')}">
         ${RESOURCE_KEYS.map((key) => `<div class="resource-chip" data-resource-chip="${key}"><span>${tr(key)}</span><strong data-resource="${key}">${tr('unknown')}</strong></div>`).join('')}
         <div class="resource-chip optional-power"><span>${tr('power')}</span><strong data-value="power">${tr('unknown')}</strong></div>
       </div>
       <div class="population-block"><span>${tr('population')}</span><strong data-value="population"></strong><small data-value="healthy"></small></div>
-      <div class="surface-block" data-value="surface"><span>${tr('surfaceDose')}</span><strong data-value="radiation"></strong><small data-value="radiationForecast"></small></div>
+      <div class="surface-block demies-block" data-value="surface"></div>
       <div class="hud-stock-stack">
         <div class="resource-extra" aria-label="${tr('resources')}">${EXTRA_RESOURCE_KEYS.map((key) => `<div class="resource-chip" data-resource-chip="${key}"><span>${tr(key)}</span><strong data-resource="${key}">${tr('unknown')}</strong></div>`).join('')}</div>
         <div class="reserve-panel" data-reserve-panel role="group" aria-label="${tr('shelterReserves')}" title="${tr('reserveHelpDetailed', { filterDays: ALERTS.FILTER_YELLOW_FORECAST_DAYS })}"><span class="reserve-title">${tr('shelterReserves')}</span>${RESERVE_KEYS.map((key) => `<button type="button" class="reserve-item" data-reserve="${key}" data-reserve-item="${key}"><span>${tr(key === 'air' ? 'airOverlay' : key)}</span><strong data-reserve-days="${key}">${tr('unknown')}</strong>${RESERVE_DETAILS.has(key) ? `<small class="m6b-water-hud-detail" data-reserve-detail="${key}"></small>` : ''}</button>`).join('')}</div>
-        <div class="shelter-alert" data-alert-banner hidden><button type="button" data-alert-entry title="${tr('alertBannerHint')}"></button></div>
+        <div class="shelter-alert" data-alert-banner hidden><button type="button" data-alert-entry title="${tr('alertBannerHint')}"></button><button type="button" data-alert-evacuate hidden></button></div>
       </div>
       <div class="colonist-board" role="group" aria-label="${tr('colonistBoard')}" title="${tr('colonistBoardHelp')}">${colonistSlotButtons(Math.max(COLONIST_SLOTS, this.game.sim.colonists.length))}</div>`;
     for (const element of this.root.querySelectorAll('[data-value]')) this.valueNodes[element.dataset.value] = element;
@@ -190,6 +232,26 @@ export class UI {
   }
 
   onHudClick(event) {
+    const veilleeButton = event.target.closest('button[data-until-veillee]');
+    if (veilleeButton) {
+      if (this.game.sim.veillee?.session) this.m6Panels?.openVeillee?.();
+      else if (this.game.untilVeillee?.() === false) this.toast('veilleeUntilBlocked');
+      return;
+    }
+    const demiesButton = event.target.closest('button[data-demies-toggle]');
+    if (demiesButton) {
+      this.demiesExpanded = !this.demiesExpanded;
+      demiesButton.setAttribute('aria-expanded', String(this.demiesExpanded));
+      const details = this.valueNodes.surface?.querySelector('.demies-details');
+      if (details) details.hidden = !this.demiesExpanded;
+      return;
+    }
+    const evacuationButton = event.target.closest('button[data-alert-evacuate]');
+    if (evacuationButton) {
+      const evacuation = rescueAlertModel(this.game.sim)?.evacuation;
+      if (evacuation) this.applyOrder({ type: evacuation.active ? 'cancelEvacuation' : 'evacuate', excavationId: evacuation.excavationId });
+      return;
+    }
     const reserveButton = event.target.closest('button[data-reserve]');
     if (reserveButton) {
       this.openReserve(reserveButton.dataset.reserve);
@@ -198,7 +260,7 @@ export class UI {
     const alertButton = event.target.closest('button[data-alert-entry]');
     if (alertButton) {
       const entryId = Number(alertButton.dataset.alertEntry);
-      const currentAlert = latestAlertModel(this.game.sim)?.entry;
+      const currentAlert = rescueAlertModel(this.game.sim)?.entry;
       const entry = this.game.sim.journal.find((item) => item.id === entryId)
         ?? (currentAlert?.id === entryId ? currentAlert : null);
       if (entry?.focus) this.game.focus(entry.focus.x, entry.focus.y);
@@ -211,7 +273,7 @@ export class UI {
     const colonistButton = event.target.closest('button[data-colonist-id]');
     if (!colonistButton || colonistButton.disabled) return;
     const id = Number(colonistButton.dataset.colonistId);
-    if (this.game.sim.colonists.some((colonist) => colonist.id === id)) this.game.select({ type: 'colonist', id });
+    if (this.game.sim.colonists.some((colonist) => colonist.id === id)) openTokenBoard(this.game, id);
   }
 
   hudClearance() {
@@ -266,6 +328,9 @@ export class UI {
   }
 
   refreshInterfaceScale(scale, canReduce, canEnlarge) {
+    // Called at start, on every window resize and on every change of scale.
+    this.speedCompact = !speedNamesFit(globalThis.innerWidth, scale);
+    this.root?.querySelector?.('.speed-controls')?.classList?.toggle('compact', this.speedCompact);
     const nodes = this.interfaceScaleNodes;
     if (!nodes) return;
     if (nodes.value) nodes.value.textContent = `${scale} %`;
@@ -296,6 +361,12 @@ export class UI {
 
   refreshDynamic() {
     if (!this.game.sim) return;
+    const veilleeButton = this.root?.querySelector?.('[data-until-veillee]');
+    if (veilleeButton) {
+      veilleeButton.hidden = !this.game.sim.veillee;
+      veilleeButton.textContent = tr(this.game.sim.veillee?.session ? 'veilleeOpen' : 'veilleeUntil');
+      veilleeButton.title = veilleeButtonHelp(this.game.sim);
+    }
     const { sim } = this.game;
     const date = gameDate(sim.tick);
     if (this.valueNodes.date) this.valueNodes.date.textContent = tr('date', date);
@@ -306,6 +377,9 @@ export class UI {
       button.setAttribute('aria-pressed', String(active));
       if (speed === 0) button.setAttribute('aria-label', tr(this.game.speed === 0 ? 'resume' : 'pause'));
     }
+    // The small line above the date names the current speed (or the pause).
+    const speedName = tr(speedStep(this.game.speed)?.nameKey ?? (this.game.speed === 0 ? 'pause' : 'speed'));
+    if (this.valueNodes.speedName && this.valueNodes.speedName.textContent !== speedName) this.valueNodes.speedName.textContent = speedName;
     const totals = resourceTotals(sim);
     const status = resourceStatusModel(sim, totals);
     this.restoreWaterTrend(sim);
@@ -354,12 +428,9 @@ export class UI {
         stored: formatNumber(status.power.storedKwh), capacity: formatNumber(status.power.capacityKwh),
       });
     }
-    const radiation = surfaceHudModel(sim);
-    const forecastText = tr('forecast', { value: radiation.forecastDate ? tr('date', radiation.forecastDate) : tr('unknown') });
-    if (this.valueNodes.radiation) this.valueNodes.radiation.textContent = Number.isFinite(radiation.dose) ? `${formatDoseRate(radiation.dose)} mSv/h` : tr('unknown');
-    if (this.valueNodes.radiationForecast) this.valueNodes.radiationForecast.textContent = forecastText;
-    if (this.valueNodes.surface) this.valueNodes.surface.title = forecastText;
+    this.refreshDemies();
     this.refreshColonists();
+    this.tokenBoard?.refresh();
     this.journal?.refresh();
     this.refreshDebug();
     this.m4Panels?.refresh();
@@ -399,13 +470,40 @@ export class UI {
     }
   }
 
+  refreshDemies() {
+    const root = this.valueNodes.surface;
+    if (!root) return;
+    const active = this.demies?.activeNumbers ?? [];
+    if (!root.querySelector('[data-demies-toggle]')) root.innerHTML = demiesHudHtml(this.game.sim, active);
+    const view = demiesHudView(this.game.sim);
+    const button = root.querySelector('[data-demies-toggle]');
+    button?.setAttribute('aria-expanded', String(Boolean(this.demiesExpanded)));
+    button?.setAttribute('aria-label', view.label);
+    if (button) button.title = view.help;
+    for (const [selector, text] of [['.demies-heading b', view.title], ['.demies-heading strong', view.rate], ['.demies-countdown', view.countdown]]) {
+      const node = root.querySelector(selector);
+      if (node && node.textContent !== text) node.textContent = text;
+    }
+    // Existing marks survive dose/countdown changes: their animation plays once.
+    for (const notch of root.querySelectorAll('[data-demie]')) {
+      const number = Number(notch.dataset.demie);
+      notch.classList.toggle('passed', number <= view.progress.count);
+      notch.classList.toggle('celebrating', active.includes(number));
+    }
+    const details = root.querySelector('.demies-details');
+    if (details) {
+      details.hidden = !this.demiesExpanded;
+      if (details.innerHTML !== view.detailsHtml) details.innerHTML = view.detailsHtml;
+    }
+  }
+
   refreshDebug() {
     if (!this.debugText) return;
     this.debugText.hidden = !this.game.debug;
     if (!this.game.debug) return;
     const hover = this.game.hover;
     this.debugText.textContent = [
-      `${tr('fps')} ${formatNumber(this.game.fps ?? 0, true)} · ${tr('ticks')} ${formatNumber(this.game.speed * TIME.TICKS_PER_SECOND_AT_X1, true)}`,
+      `${tr('fps')} ${formatNumber(this.game.fps ?? 0, true)} · ${tr('ticks')} ${formatNumber(ticksPerSecond(this.game.speed))}`,
       `${tr('seed')} ${this.game.sim.seed}`,
       hover ? `${tr('cell')} ${hover.x}, ${hover.y}` : '',
     ].filter(Boolean).join('\n');
@@ -510,14 +608,19 @@ export class UI {
 
   refreshAlert() {
     if (!this.alertBanner) return;
-    const alert = latestAlertModel(this.game.sim);
+    const alert = rescueAlertModel(this.game.sim);
     this.alertBanner.hidden = !alert;
     if (!alert) return;
-    this.alertBanner.className = `shelter-alert ${alert.entry.level}`;
+    this.alertBanner.className = `shelter-alert ${alert.severity === 'red' ? 'danger' : alert.entry.level}`;
     const button = this.alertBanner.querySelector('button[data-alert-entry]');
     if (!button) return;
     button.dataset.alertEntry = String(alert.entry.id);
-    button.textContent = formatJournalEntry(alert.entry, this.game.sim.excavations);
+    button.textContent = alert.text;
+    const evacuate = this.alertBanner.querySelector('button[data-alert-evacuate]');
+    if (evacuate && evacuate !== button) {
+      evacuate.hidden = !alert.evacuation;
+      evacuate.textContent = tr(alert.evacuation?.active ? 'evacuationReturn' : 'evacuationButton');
+    }
   }
 
   cycleOverlay() {
@@ -540,6 +643,7 @@ export class UI {
   }
 
   update(dt) {
+    this.demies?.update(dt);
     this.elapsed += dt;
     this.selectionElapsed += dt;
     if (this.elapsed >= 0.2) {

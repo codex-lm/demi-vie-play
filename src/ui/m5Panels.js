@@ -83,11 +83,11 @@ function dilemmaDefinitionFor(pending) {
   return dilemmaDefinition(pending.definitionId) ?? pending.definition ?? DILEMMAS[0];
 }
 
-export function dilemmaPanel(pending, sim = null) {
+export function dilemmaPanel(pending, sim = null, { embedded = false } = {}) {
   const definition = dilemmaDefinitionFor(pending);
   const target = pending.target ?? {};
-  const portrait = target.colonistId !== undefined ? `<canvas class="portrait" data-colonist-id="${target.colonistId}" width="72" height="72" aria-hidden="true"></canvas>` : '';
-  return `<div class="panel-heading"><div><span class="eyebrow">${iconMarkup(sim?.m5?.storyteller?.mode)}${escapeHtml(tr('dilemma'))}</span><h2>${escapeHtml(tr(pending.titleKey, target))}</h2></div><canvas class="m5-vignette" data-m5-vignette="${dilemmaArt(pending.definitionId ?? pending.definition?.id)}" width="320" height="180" aria-hidden="true"></canvas></div>
+  const portrait = !embedded && target.colonistId !== undefined ? `<canvas class="portrait" data-colonist-id="${target.colonistId}" width="72" height="72" aria-hidden="true"></canvas>` : '';
+  return `<div class="panel-heading"><div><span class="eyebrow">${embedded ? '' : iconMarkup(sim?.m5?.storyteller?.mode)}${escapeHtml(tr('dilemma'))}</span><h2>${escapeHtml(tr(pending.titleKey, target))}</h2></div>${embedded ? '' : `<canvas class="m5-vignette" data-m5-vignette="${dilemmaArt(pending.definitionId ?? pending.definition?.id)}" width="320" height="180" aria-hidden="true"></canvas>`}</div>
     <div class="m5-dilemma-intro">${portrait}<p>${escapeHtml(tr(pending.bodyKey, target))}</p></div>
     <div class="encounter-choices">${pending.choices.map((choice, index) => {
       const consequence = dilemmaDefinition(pending.definitionId)
@@ -140,7 +140,7 @@ export function causeReportsPanel(sim) {
 export function causePanel(report, sim, options = {}) {
   const title = reportTitle(report, sim);
   const causes = (report.causes ?? []).map((cause) => tr(cause.code ?? cause)).join(', ');
-  const steps = (report.steps ?? []).map((entry) => `<li class="${entry.level}"><time>${escapeHtml(date(entry.tick))}</time><span>${escapeHtml(formatJournalEntry(entry, sim.excavations))}</span></li>`).join('');
+  const steps = (report.steps ?? []).map((entry) => `<li class="${entry.level}"><time>${escapeHtml(date(entry.tick))}</time><span>${escapeHtml(formatJournalEntry(entry, sim.excavations, { sim }))}</span></li>`).join('');
   const stress = report.stress ? `<dl class="fit-facts"><div><dt>${escapeHtml(tr('stress'))}</dt><dd>${formatNumber(report.stress.ratio)}</dd></div><div><dt>${escapeHtml(tr('span'))}</dt><dd>${formatNumber(report.stress.span)} / ${formatNumber(report.stress.maxSpan)} m</dd></div><div><dt>${escapeHtml(tr('slab'))}</dt><dd>${formatNumber(report.stress.slab)} / ${formatNumber(report.stress.requiredSlab)} m</dd></div></dl>` : '';
   return `<div class="panel-heading"><div><span class="eyebrow">${escapeHtml(tr('why'))}</span><h2>${escapeHtml(title)}</h2></div>${options.embedded ? '' : colonistPortraitMarkup(report.colonistId, 'm5-cause-portrait')}${options.embedded ? '' : closeButton()}</div>
     ${causes ? `<p class="m4-warning">${escapeHtml(causes)}</p>` : ''}${stress}
@@ -355,7 +355,8 @@ export class M5Panels {
       return true;
     }
     if (action === 'expeditionRecall') {
-      const result = this.game.apply({ type: 'expeditionRecall', expeditionId: Number(button.dataset.expeditionId) });
+      const expedition = this.game.sim.expeditions?.active?.find(candidate => String(candidate.id) === button.dataset.expeditionId);
+      const result = this.game.apply({ type: 'expeditionRecall', expeditionId: expedition?.id ?? Number(button.dataset.expeditionId) });
       if (!result.ok) this.ui.toast(result.error ?? 'actionFailed');
       this.renderModal();
       return true;

@@ -1,5 +1,6 @@
 import { TIME, WORLD } from '../data/balance.js';
 import { MATERIAL } from '../data/materials.js';
+import { SPEED, ticksPerSecond } from '../data/speeds.js';
 import { drawEffect } from '../../art/effects.js';
 import { drawM5Effect } from './m5EffectSprites.js';
 import { drawColonist } from '../../art/colonist.js';
@@ -103,8 +104,11 @@ export function transientAge(game, event, duration) {
     }
     const freshBatch = frame?.sim === game.sim && ticks <= TIME.MAX_TICKS_PER_FRAME
       && (event.tick > frame.previousTick || (frame.first && ticks === 0));
-    if (!freshBatch && ticks > TIME.TICKS_PER_SECOND_AT_X1 * duration) return Infinity;
-    clock = { start: now, initial: freshBatch ? 0 : ticks / TIME.TICKS_PER_SECOND_AT_X1 };
+    // An older event is aged at the pace of "Travailler" (the former x1), or
+    // at the real pace when the game runs slower than that.
+    const pace = ticksPerSecond(Math.min(SPEED.WORK, game.speed || game.previousSpeed || SPEED.WORK));
+    if (!freshBatch && ticks > pace * duration) return Infinity;
+    clock = { start: now, initial: freshBatch ? 0 : ticks / pace };
     clocks.set(event, clock);
   }
   return clock.initial + Math.max(0, now - clock.start);

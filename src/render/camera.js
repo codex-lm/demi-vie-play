@@ -134,8 +134,10 @@ export class Camera {
     this.constrainTargets();
   }
 
-  zoomAt(factor, screenX = this.width / 2, screenY = this.height / 2) {
-    const keepSurface = this.targetY <= this.minimumTargetY() + 1e-7;
+  // anchorSurface: the wheel keeps the opening view pinned to the surface; a
+  // two-finger pinch does not, so the rock stays under the fingers.
+  zoomAt(factor, screenX = this.width / 2, screenY = this.height / 2, anchorSurface = true) {
+    const keepSurface = anchorSurface && this.targetY <= this.minimumTargetY() + 1e-7;
     const before = this.screenToWorld(screenX, screenY, true);
     this.targetZoom = clamp(this.targetZoom * factor, CAMERA.MIN_ZOOM, CAMERA.MAX_ZOOM);
     const cell = this.cellSize(this.targetZoom);

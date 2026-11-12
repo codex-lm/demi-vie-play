@@ -1,6 +1,7 @@
 import { FIRE_TEXT_EN } from '../data/fireText.en.js';
 import { RADIO_EVENTS, RADIO_NEIGHBORS_FULL } from '../data/radio.js';
 import { dilemmaTextKey } from '../data/storytellerText.js';
+import { POI_TEXT } from '../data/poiText.js';
 import { getLanguage, STR, tr } from '../data/strings.fr.js';
 import { excavationDisplayName } from './models.js';
 
@@ -59,8 +60,10 @@ function dilemmaSummary(code, params) {
 }
 
 export function localizeStoryJournalParams(entry, params, excavations) {
-  if (getLanguage() !== 'en') return;
   const part = storyParts[entry.code];
-  if (part) params.summary = storySummary(params, part, excavations);
+  if (part && getLanguage() === 'en') params.summary = storySummary(params, part, excavations);
+  // Display current wording in both languages while leaving historical saves and
+  // new simulation journals byte-for-byte unchanged.
   if (entry.code.startsWith('eventDilemma') && params.definitionId) params.summary = dilemmaSummary(entry.code, params);
+  if (params.poi === POI_TEXT.poiBatColonyName) params.poi = tr('poiBatColonyName');
 }

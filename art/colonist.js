@@ -23,11 +23,11 @@ const OUTFITS = {
 /** Shared portrait/silhouette wardrobe. Callers receive a copy, never mutable palette state. */
 export function colonistOutfit(job='none') { return [...(OUTFITS[job]??OUTFITS.none)]; }
 
-export function colonistFeatures(seed = 1, age = 'adult') {
+export function colonistFeatures(seed = 1, age = 'adult', sex = null) {
   return {
     skin: SKINS[Math.floor(hash(seed,1)*SKINS.length)],
     hair: age === 'elder' ? ['#b4b2a0','#d9cfb4','#919b96'][Math.floor(hash(seed,2)*3)] : HAIR[Math.floor(hash(seed,2)*HAIR.length)],
-    style: Math.floor(hash(seed,3)*5), beard: age !== 'child' && hash(seed,4) > .55,
+    style: Math.floor(hash(seed,3)*5), beard: age !== 'child' && sex !== 'female' && hash(seed,4) > .55,
     width: .91 + hash(seed,5)*.20, nose: .055 + hash(seed,6)*.025,
     scarf: ['#c6935f','#9cb5a5','#b98073','#c2ad7a'][Math.floor(hash(seed,7)*4)],
     glasses: hash(seed,8) > .78, blinkOffset: hash(seed,9)*4.7,
@@ -257,7 +257,7 @@ export function drawColonist(c,x,y,cellPx,opts={}) {
   const pose=POSES.includes(opts.pose)?opts.pose:'idle',job=JOBS.includes(opts.job)?opts.job:'none';
   const age=outsider==='strangerChild'?'child':AGES.includes(opts.age)?opts.age:'adult',t=Number.isFinite(opts.t)?opts.t:0;
   const suited=pose==='suit'||opts.suit===true;
-  const f=colonistFeatures(opts.seed??1,age),s=samplePose(pose,t,age),colors=suited?['#a5a483','#cebf91','#737e6d']:OUTFITS[job],detail=cellPx>=30;
+  const f=colonistFeatures(opts.seed??1,age,opts.sex),s=samplePose(pose,t,age),colors=suited?['#a5a483','#cebf91','#737e6d']:OUTFITS[job],detail=cellPx>=30;
   if (typeof opts.skin === 'string' && /^#[0-9a-f]{6}$/i.test(opts.skin)) f.skin = opts.skin;
   const handColor=suited?'#4f6663':f.skin;
   if(outsider==='stranger'||outsider==='strangerChild') {s.lean+=.17;s.head+=.16;s.hands=[[.05,-.40],[.15,-.34]];}

@@ -148,7 +148,9 @@ function requestHelp(sim, neighbor, eventId, definition) {
   if (neighbor.helpRequested) return;
   neighbor.helpRequested = true;
   const dilemma = helpDefinition(sim, neighbor, eventId, definition);
-  sim.m5.radio.pendingHelp = dilemma;
+  // Legacy saves retain their exact single-slot behavior. With the evening
+  // queue, simultaneous calls must retain the older request as well.
+  if (!sim.veillee || !sim.m5.radio.pendingHelp) sim.m5.radio.pendingHelp = dilemma;
   sim.m5.radio.helpRequests.push({ id: dilemma.id, neighborId: neighbor.id, tick: sim.tick, status: 'awaitingDilemma', dilemma });
 }
 
@@ -163,6 +165,9 @@ function offerPendingHelp(sim) {
   if (request) {
     request.status = 'offered';
     request.offeredTick = sim.tick;
+  }
+  if (sim.veillee) {
+    radio.pendingHelp = radio.helpRequests.find(candidate => candidate.status === 'awaitingDilemma')?.dilemma ?? null;
   }
 }
 

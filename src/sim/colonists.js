@@ -1,3 +1,4 @@
+import { evacuatedAt, evacuationStepAllowed, prepareEvacuationMove } from './evacuation.js';
 import { AFFLICTIONS, AIR, CULTIVATION, HEAT, NEEDS, TIME, WATER, WORK, WORLD } from '../data/balance.js';
 import { M6 } from '../data/m6.js';
 import { PEOPLE } from '../data/people.js';
@@ -129,7 +130,7 @@ function isWorkHour(sim) {
 
 function usableRoom(excavation) {
   return excavation && excavation.state !== 'collapsed' && excavation.state !== 'planned' && excavation.state !== 'digging'
-    && !excavation.disabled && (excavation.floodRatio ?? 0) <= WATER.FLOOD_UNUSABLE_RATIO;
+    && !excavation.disabled && !excavation.evacuation && (excavation.floodRatio ?? 0) <= WATER.FLOOD_UNUSABLE_RATIO;
 }
 
 // Leisure and rest must remain safe even when the room average hides a deep puddle.
@@ -500,6 +501,19 @@ function moveAlongPath(sim, colonist) {
   let moved = 0;
   while (colonist.pathIndex < colonist.path.length) {
     const next = colonist.path[colonist.pathIndex];
+    const closed = evacuatedAt(sim, next.x, next.y);
+    const destination = colonist.path.at(-1);
+    const crosses = closed && destination && !evacuatedAt(sim, destination.x, destination.y);
+    if ((closed && !crosses && colonist.pathGoal !== 'floodEscape'
+        && !isRescueJob(sim, getJob(sim, colonist.jobId))
+        && !(colonist.pathGoal === 'evacuate' && colonist.evacuationFrom === closed.id))
+      || (colonist.pathGoal === 'evacuate' && !colonist.evacuationFallback
+        && !evacuationStepAllowed(sim, sim.excavation(colonist.evacuationFrom), next.x, next.y))) {
+      colonist.path = [];
+      colonist.pathIndex = 0;
+      colonist.pathGoal = null;
+      break;
+    }
     // Power changes invalidate shaft navigation without a terrain revision.
     // Read live elevator flags even when continuing an already planned escape.
     const elevator = next.climb && (nav.elevators[sim.world.index(next.x, next.y)]
@@ -1626,6 +1640,14 @@ export function updateColonists(sim) {
       colonist.task = 'sit';
       continue;
     }
+    if (prepareEvacuationMove(sim, colonist)) {
+      moveAlongPath(sim, colonist);
+      continue;
+    }
+    if (colonist.evacuationCarryingChild) {
+      dropCarriedChild(sim, colonist);
+      delete colonist.evacuationCarryingChild;
+    }
     if (escapeFlood(sim, colonist)) continue;
     if (updateCelebration(sim, colonist)) continue;
     if (colonist.jobId !== null && (baby || !canWork(sim, colonist, getJob(sim, colonist.jobId)))) releaseJob(sim, colonist);
@@ -1673,7 +1695,8 @@ export function updateColonists(sim) {
     }
 
     if (colonist.pathGoal !== task.key || colonist.navRevision !== sim.world.revision || colonist.pathIndex >= colonist.path.length) {
-      const path = findPath(sim, colonist, task.targets);
+      const path = findPath(sim, colonist, task.targets, undefined, undefined,
+        sim.evacuationCount && !colonist.personal && isRescueJob(sim, job) ? { rescue: true } : null);
       if (path.length === 0) {
         failTask(sim, colonist);
         continue;

@@ -4,7 +4,13 @@ import { clamp } from './cues.js';
 export const MAX_VOICES = 20;
 const FLOOR = 0.00001;
 const ROOTS = { spring: 146.832, summer: 164.814, autumn: 130.813, winter: 110 };
-const MINOR = [0, 3, 7, 10, 12, 15, 19];
+export const MUSIC_SCALE = Object.freeze([0, 2, 4, 7, 9, 12, 16, 19]);
+export const EVENT_CHORDS = Object.freeze({
+  birth: Object.freeze([12, 16, 19]), objective: Object.freeze([0, 4, 7, 12]),
+  opened: Object.freeze([0, 4, 7, 12]), memory: Object.freeze([0, 7]),
+  dilemma: Object.freeze([0, 2, 7]), red: Object.freeze([0, 1, 7]),
+  yellow: Object.freeze([0, 7, 12]), season: Object.freeze([0, 4, 7, 12]),
+});
 const hz = (root, semitones) => root * 2 ** (semitones / 12);
 function randomStream(seed) {
   let state = seed >>> 0 || 1;
@@ -23,10 +29,11 @@ export class ProceduralSynth {
     this.phase = 0;
     this.master = context.createGain(); this.master.gain.value = 0;
     this.music = context.createGain(); this.music.gain.value = 0.5;
+    this.musicFilter = context.createBiquadFilter(); this.musicFilter.type = 'lowpass'; this.musicFilter.frequency.value = 20000;
     this.compressor = context.createDynamicsCompressor();
     this.compressor.threshold.value = -18; this.compressor.knee.value = 16;
     this.compressor.ratio.value = 3; this.compressor.attack.value = 0.008; this.compressor.release.value = 0.28;
-    this.music.connect(this.master); this.master.connect(this.compressor); this.compressor.connect(context.destination);
+    this.music.connect(this.musicFilter); this.musicFilter.connect(this.master); this.master.connect(this.compressor); this.compressor.connect(context.destination);
     this.noise = context.createBuffer(1, Math.ceil(context.sampleRate * 3.1), context.sampleRate);
     const samples = this.noise.getChannelData(0);
     for (let i = 0; i < samples.length; i++) samples[i] = this.random() * 2 - 1;
@@ -100,6 +107,10 @@ export class ProceduralSynth {
       const pitch = (soft ? 130 : hard ? 890 : cue.material === 'coal' ? 310 : 590) * (0.9 + this.random() * 0.2);
       voice({ duration: soft ? 0.115 : 0.22, frequency: pitch, endFrequency: pitch * 0.6, gain: soft ? 0.085 : 0.09, wave: 'triangle' });
       voice({ duration: 0.09 + this.random() * 0.045, noise: true, cutoff: soft ? 580 : 2700, gain: soft ? 0.18 : 0.14 });
+    } else if (cue.type === 'rescueKnock') {
+      // A single dry knock through stone: body and contact share one onset.
+      voice({ duration: 0.105, frequency: 145, endFrequency: 82, gain: 0.14, wave: 'triangle', cutoff: 560, attack: 0.002 });
+      voice({ duration: 0.045, noise: true, filter: 'bandpass', cutoff: 680, gain: 0.12, attack: 0.001 });
     } else if (cue.type === 'collapse') {
       voice({ duration: 1.8, noise: true, cutoff: 210, gain: 0.48, attack: 0.018 });
       voice({ duration: 1.3, frequency: 72, endFrequency: 28, gain: 0.18 });
@@ -132,24 +143,32 @@ export class ProceduralSynth {
       voice({ duration: 0.07, frequency: 180, endFrequency: 110, gain: 0.035, wave: 'triangle', cutoff: 600 });
       [330, 440].forEach((frequency, i) => voice({ time: time + 0.08 + i * 0.1,
         duration: 0.28, frequency, gain: 0.024, attack: 0.015, cutoff: 1100 }));
+    } else if (cue.type === 'demie') {
+      // One small, warm bell strike: simultaneous partials with a quick attack
+      // and a ringing decay. Short partials keep eleven spaced bells below the
+      // voice ceiling and inside the three-second moment even after a tick jump.
+      voice({ duration: 0.85, frequency: 660, gain: 0.055, attack: 0.003, cutoff: 3000 });
+      voice({ duration: 0.48, frequency: 1320, gain: 0.018, attack: 0.002, cutoff: 3000 });
+      voice({ duration: 0.22, frequency: 1770, gain: 0.008, attack: 0.002, cutoff: 3000 });
     } else if (cue.type === 'radio') {
       voice({ duration: 0.62, noise: true, filter: 'bandpass', cutoff: 1900, gain: 0.14, attack: 0.025 });
       voice({ duration: 0.12, frequency: 930, gain: 0.024 });
-    } else if (cue.type === 'dilemma') this.chord(time, [0, 3, 10], { gain: 0.04 * gain, duration: 1.6 });
-    else if (cue.type === 'birth') this.chord(time, [12, 15, 19], { root: 130.813, gain: 0.028 * gain, duration: 1.8 });
+    } else if (cue.type === 'dilemma') this.chord(time, EVENT_CHORDS.dilemma, { gain: 0.04 * gain, duration: 1.6 });
+    else if (cue.type === 'birth') this.chord(time, EVENT_CHORDS.birth, { root: 130.813, gain: 0.028 * gain, duration: 1.8 });
     else if (cue.type === 'death' || cue.type === 'burial') this.chord(time, [-12, -5], { root: 110, gain: 0.035 * gain, duration: 2.2, attack: 0.12 });
-    else if (['opened', 'memory', 'objective'].includes(cue.type)) this.chord(time, cue.type === 'memory' ? [0, 7] : [0, 7, 12], { gain: 0.022 * gain, duration: 1.8, attack: 0.11 });
+    else if (['opened', 'memory', 'objective'].includes(cue.type)) this.chord(time, EVENT_CHORDS[cue.type], { gain: 0.022 * gain, duration: 1.8, attack: 0.11 });
     else if (cue.type === 'fire') voice({ duration: 0.07 + this.random() * 0.07, noise: true, filter: 'highpass', cutoff: 800, gain: 0.055 });
     else if (cue.type === 'click') voice({ duration: 0.04, frequency: 530 + this.random() * 80, endFrequency: 300, gain: 0.055, wave: 'triangle' });
     else if (['drip', 'flood', 'breach', 'extinguish'].includes(cue.type)) voice({ duration: cue.type === 'drip' ? 0.15 : 0.9, noise: true, filter: 'bandpass', cutoff: 1200, gain: cue.type === 'breach' ? 0.3 : 0.12 });
-    else if (['yellow', 'red', 'season'].includes(cue.type)) this.chord(time, cue.type === 'red' ? [0, 1, 7] : [0, 7, 12], { gain: 0.03 * gain, duration: 1.4 });
+    else if (['yellow', 'red', 'season'].includes(cue.type)) this.chord(time, EVENT_CHORDS[cue.type], { gain: 0.03 * gain, duration: 1.4 });
   }
 
   update(ambient, options = {}, time = this.context.currentTime) {
     this.level(this.master.gain, options.muted ? 0 : clamp(options.volume ?? 0.7), time, 0.04);
-    this.level(this.music.gain, clamp(options.music ?? 0.5), time, 0.3);
+    this.level(this.music.gain, clamp(options.music ?? 0.5) * clamp(options.nightGain ?? 1) * clamp(options.duck ?? 1), time, 0.3);
+    this.level(this.musicFilter.frequency, clamp(options.lowpass ?? 20000, 100, 20000), time, 0.5);
     const deep = clamp(ambient.depth / 220);
-    this.level(this.loops.rumble.gain.gain, 0.07 + deep * 0.15, time);
+    this.level(this.loops.rumble.gain.gain, 0.045 + deep * 0.10, time);
     this.level(this.loops.rumble.filter.frequency, 88 - deep * 45 + Math.sin(time * 0.17) * 4, time);
     this.level(this.loops.ventilation.gain.gain, ambient.ventilation * 0.065, time);
     this.level(this.loops.wind.gain.gain, ambient.bankWind ? 0 : ambient.surface * (0.055 + Math.sin(time * 0.23) * 0.01), time);
@@ -161,11 +180,11 @@ export class ProceduralSynth {
     const root = ROOTS[ambient.season] ?? ROOTS.spring;
     if (time >= this.nextMusic) {
       const offset = [0, -7, -5, 0][this.phase++ % 4];
-      this.chord(time, [offset - 12, offset + 3, offset + 7], { root, gain: 0.014, duration: 11.5, attack: 3.8, bus: this.music });
+      this.chord(time, [offset - 12, offset + 4, offset + 7], { root, gain: 0.019, duration: 11.5, attack: 3.8, bus: this.music });
       this.nextMusic = time + 12 + this.random() * 4;
     }
     if (time >= this.nextNote) {
-      this.voice({ time, duration: 3.7, frequency: hz(root, MINOR[Math.floor(this.random() * MINOR.length)]), gain: 0.018, attack: 0.06, pan: this.random() * 1.2 - 0.6, bus: this.music });
+      this.voice({ time, duration: 3.7, frequency: hz(root, MUSIC_SCALE[Math.floor(this.random() * MUSIC_SCALE.length)]), gain: 0.024, attack: 0.06, pan: this.random() * 1.2 - 0.6, bus: this.music });
       this.nextNote = time + 4.4 + this.random() * 4.7;
     }
   }
@@ -173,6 +192,6 @@ export class ProceduralSynth {
   dispose() {
     for (const loop of Object.values(this.loops)) { try { loop.source.stop(); } catch {} loop.source.disconnect(); loop.filter.disconnect(); loop.gain.disconnect(); }
     for (const voice of this.voices) { try { voice.source.stop(); } catch {} }
-    this.music.disconnect(); this.master.disconnect(); this.compressor.disconnect();
+    this.music.disconnect(); this.musicFilter.disconnect(); this.master.disconnect(); this.compressor.disconnect();
   }
 }

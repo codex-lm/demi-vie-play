@@ -1,15 +1,12 @@
 import { TIME } from '../data/balance.js';
 import { LAWS } from '../data/laws.js';
-import { WORK_TYPES } from '../data/people.js';
 import { WORKSHOP_RECIPES } from '../data/recipes.js';
 import { RESEARCH_NODES } from '../data/research.js';
 import { tr } from '../data/strings.fr.js';
 import { formatNumber } from './tooltips.js';
-
-const WORK_LABELS = Object.freeze({
-  dig: 'dig', haul: 'carrying', build: 'buildSkill', produce: 'production',
-  crank: 'crank', medic: 'medicSkill', teach: 'teachSkill',
-});
+import { finePrioritiesMarkup, tokenBoardState, tokenInitials } from './tokenBoard.js';
+import { lockerHistoryEntries, lockerMood, lockerRelationKey, lockerSkillModels, personalObjectFor } from './lockerModels.js';
+import { formatJournalEntry } from './journal.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -49,12 +46,24 @@ export function moraleCauseLines(colonist) {
   return moraleCauseModels(colonist).map((cause) => cause.line);
 }
 
-export function colonistSocialPanel(sim, colonist) {
-  const traits = (colonist.traits ?? []).slice(0, 2).map((trait) => `<span class="trait-badge">${escapeHtml(tr(`trait_${trait}`))}</span>`).join('');
-  const causes = moraleCauseModels(colonist);
+export function colonistTokenPanel(sim, colonist) {
+  const state = tokenBoardState(sim, colonist);
+  return `<section class="locker-token" data-locker-section="token"><button type="button" class="locker-token-button" data-action="tokenBoard" data-colonist-id="${colonist.id}" aria-label="${escapeHtml(tr('tokenBoardTitle'))}"><span class="locker-token-round" aria-hidden="true">${escapeHtml(tokenInitials(colonist))}</span><span><strong>${escapeHtml(tr('lockerToken'))}</strong><small>${escapeHtml(state.label)}</small><span>${escapeHtml(tr('tokenBoardTitle'))} →</span></span></button></section>`;
+}
+
+function detailMarkup(id, line, detail, className = '') {
+  return `<details class="locker-detail ${className}" data-locker-detail="${id}"><summary title="${escapeHtml(detail)}" data-locker-focus="${id}">${escapeHtml(line)}</summary><small>${escapeHtml(detail)}</small></details>`;
+}
+
+export function colonistSocialPanel(sim, colonist, { needsMarkup = '', souvenirMarkup = '' } = {}) {
+  const traits = (colonist.traits ?? []).slice(0, 2).map(trait => `<li class="locker-habit" title="${escapeHtml(tr(`trait_${trait}`))}">${escapeHtml(tr(`lockerHabit_${trait}`))}</li>`).join('');
+  const causes = moraleCauseModels(colonist).slice().sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const primary = causes[0];
   const moraleCauses = causes.length
-    ? `<ul class="morale-causes">${causes.map((cause) => `<li class="${cause.line.startsWith(tr('negativeSign')) ? 'negative' : 'positive'}"${cause.code === 'morale_neglected' ? ` title="${escapeHtml(tr('collectiveCareRemedy'))}"` : ''}>${escapeHtml(cause.line)}</li>`).join('')}</ul>`
-    : `<p class="muted">${escapeHtml(tr('unknown'))}</p>`;
+    ? `<div class="locker-mood-primary">${detailMarkup(`mood-${primary.code}`, lockerMood(primary), primary.line)}</div>
+       <div class="locker-mood-others">${causes.slice(1).map(cause => detailMarkup(`mood-${cause.code}`, lockerMood(cause), cause.line)).join('')}</div>
+       ${causes.some(cause => cause.code === 'morale_neglected') ? `<p class="locker-care-help" title="${escapeHtml(tr('collectiveCareRemedy'))}">${escapeHtml(tr('collectiveCareRemedy'))}</p>` : ''}`
+    : `<p class="locker-mood-primary">${escapeHtml(tr('lockerMoodQuiet'))}</p>`;
   const partner = sim.colonists?.find((person) => person.id === colonist.coupleId && person.health > 0);
   const relations = Object.entries(colonist.relations ?? {})
     .map(([id, value]) => ({ person: sim.colonists?.find((candidate) => candidate.id === Number(id)), value: Number(value) }))
@@ -63,23 +72,23 @@ export function colonistSocialPanel(sim, colonist) {
       || Math.abs(b.value) - Math.abs(a.value) || a.person.id - b.person.id)
     .slice(0, 6);
   const relationList = relations.length
-    ? `<ul class="relation-list">${relations.map(({ person, value }) => `<li><span>${person.id === colonist.coupleId ? `${escapeHtml(tr('relationPartner'))} · ` : ''}${escapeHtml(person.name)}</span><strong>${escapeHtml(formatNumber(value, true))}</strong></li>`).join('')}</ul>`
+    ? `<ul class="locker-relations">${relations.map(({ person, value }) => `<li>${detailMarkup(`relation-${person.id}`, `${person.id === colonist.coupleId ? `${tr('relationPartner')} · ` : ''}${tr(lockerRelationKey(value), { name: person.name })}`, tr('lockerRelationValue', { name: person.name, value: formatNumber(value, true) }))}</li>`).join('')}</ul>`
     : `<p class="muted">${escapeHtml(tr('relation_none'))}</p>`;
-  const priorities = WORK_TYPES.map((work) => {
-    const selected = Number(colonist.priorities?.[work] ?? 0);
-    const buttons = [0, 1, 2, 3, 4].map((priority) => `<button type="button" data-action="workPriority" data-colonist-id="${colonist.id}" data-work="${work}" data-priority="${priority}" class="${priority === selected ? 'active' : ''}" aria-pressed="${priority === selected}" aria-label="${escapeHtml(tr('priorityValue', { value: priority }))}" title="${escapeHtml(tr('priorityValue', { value: priority }))}">${priority}</button>`).join('');
-    return `<div class="work-priority-row"><span>${escapeHtml(tr(WORK_LABELS[work] ?? work))}</span><div class="priority-values" role="group" aria-label="${escapeHtml(tr(WORK_LABELS[work] ?? work))}">${buttons}</div></div>`;
-  }).join('');
+  const object = personalObjectFor(sim, colonist);
+  const skills = lockerSkillModels(colonist).map(skill => detailMarkup(`skill-${skill.skill}`, skill.line, skill.detail, 'locker-skill')).join('');
+  const history = lockerHistoryEntries(sim, colonist).map(entry => ({ entry, text: formatJournalEntry(entry, sim.excavations ?? [], { sim }) })).filter(({ text }) => text);
+  const historyMarkup = history.length ? `<ol class="locker-history">${history.map(({ entry, text }) => `<li data-locker-entry="${entry.id}"><time>${escapeHtml(tr('lockerHistoryDate', { day: Math.floor(entry.tick / TIME.TICKS_PER_DAY) + 1 }))}</time><span>${escapeHtml(text)}</span></li>`).join('')}</ol><small>${escapeHtml(tr('lockerHistoryLimit'))}</small>` : `<p class="muted">${escapeHtml(tr('lockerHistoryEmpty'))}</p>`;
   const behavior = colonist.crisis?.behavior;
-  return `<section class="colonist-social" data-colonist-social="${colonist.id}">
-    <div class="badges life-badges"><span class="badge">${escapeHtml(tr(`lifeStage_${colonist.lifeStage ?? 'adult'}`))}</span><span class="badge">${escapeHtml(tr('years', { value: formatNumber(colonist.age ?? 0, true) }))}</span>${behavior ? `<span class="badge red crisis-badge">${escapeHtml(tr('crisis'))} · ${escapeHtml(tr(behavior))}</span>` : ''}</div>
-    <h3>${escapeHtml(tr('traits'))}</h3><div class="trait-list">${traits}</div>
-    <h3>${escapeHtml(tr('moralCauses'))}</h3>${moraleCauses}
-    <h3>${escapeHtml(tr('couple'))}</h3><p class="couple-name">${escapeHtml(partner?.name ?? tr('noCouple'))}</p>
-    <h3>${escapeHtml(tr('relations'))}</h3>${relationList}
-    <h3>${escapeHtml(tr('workPriorities'))}</h3>
-    <div class="work-priorities">${priorities}</div>
-    <button type="button" class="wide ${colonist.automaticPriorities ? 'active' : ''}" data-action="autoPriorities" data-colonist-id="${colonist.id}" aria-pressed="${Boolean(colonist.automaticPriorities)}">${escapeHtml(tr('automatic'))}</button>
+  return `<section class="colonist-social locker-social" data-colonist-social="${colonist.id}">
+    <section data-locker-section="object" class="locker-object"><h3>${escapeHtml(tr(Number.isFinite(colonist.birthTick) && colonist.birthTick >= 0 ? 'lockerObjectBornHere' : 'lockerObject'))}</h3><strong>${escapeHtml(tr(object.nameKey))}</strong><p>${escapeHtml(tr(object.textKey))}</p><small>${escapeHtml(tr('lockerObjectContext'))}</small></section>
+    <section data-locker-section="skills"><h3>${escapeHtml(tr('lockerSkills'))}</h3><small class="locker-hint">${escapeHtml(tr('lockerDetailsHint'))}</small>${skills}</section>
+    <section data-locker-section="mood"><h3>${escapeHtml(tr('lockerMood'))}</h3>${behavior ? `<p class="crisis-badge red">${escapeHtml(tr('crisis'))} · ${escapeHtml(tr(behavior))}</p>` : ''}${moraleCauses}</section>
+    <section data-locker-section="habits"><h3>${escapeHtml(tr('lockerHabits'))}</h3><ul class="locker-habits">${traits}</ul></section>
+    ${needsMarkup}
+    <section data-locker-section="history"><h3>${escapeHtml(tr('lockerHistory'))}</h3>${historyMarkup}</section>
+    <section data-locker-section="relations"><h3>${escapeHtml(tr('lockerRelations'))}</h3><p class="couple-name">${escapeHtml(tr('couple'))} · ${escapeHtml(partner?.name ?? tr('noCouple'))}</p>${relationList}</section>
+    ${souvenirMarkup}
+    <details class="locker-fine" data-locker-detail="fine"><summary data-locker-focus="fine">${escapeHtml(tr('lockerFine'))}</summary>${finePrioritiesMarkup(colonist)}</details>
   </section>`;
 }
 

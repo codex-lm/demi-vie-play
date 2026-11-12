@@ -8,11 +8,16 @@ import { paintPortrait, portraitMarkup } from '../render/portraits.js';
 import { colonistModel, excavationDisplayName, latestAlertModel, radiationDoseModel, roomEnvironmentModel, roomProductionModel } from './models.js';
 import { formatJournalEntry } from './journal.js';
 import { formatDose, formatNumber, formatTemperature, reasonText } from './tooltips.js';
-import { colonistSocialPanel, workshopRecipePanel } from './socialPanels.js';
+import { colonistSocialPanel, colonistTokenPanel, workshopRecipePanel } from './socialPanels.js';
 import { exodusDepotPanel } from './m4Panels.js';
+import { colonistSkyHoursPanel } from './skyHours.js';
 import { causePanel, roomHazardPanel } from './m5Panels.js';
 import { SOUVENIR_DEFINITIONS } from '../data/souvenirs.js';
+import { formerTrade } from './lockerModels.js';
+import { LOCKER_DETAIL_HOLD_MS } from '../data/locker.js';
+import { openTokenBoard } from './tokenBoard.js';
 import { souvenirsForColonist } from '../sim/souvenirs.js';
+import { evacuationPanel, rescuePanel } from './rescuePanels.js';
 
 const clampPercent = (value) => Math.max(0, Math.min(100, Number(value) || 0));
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -57,9 +62,50 @@ export class SelectionPanel {
     this.root = root;
     this.root?.addEventListener('click', (event) => this.onClick(event));
     this.root?.addEventListener('change', (event) => this.onChange(event));
+    this.root?.addEventListener('keydown', (event) => {
+      if (event.target.closest?.('summary[data-locker-focus]')
+        && ['Space', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.code)) {
+        // Keep native disclosure/scroll keys out of the map's global shortcuts.
+        event.stopPropagation();
+      }
+    });
+    this.root?.addEventListener('pointerdown', (event) => this.onLockerPointerDown(event));
+    this.root?.addEventListener('pointerup', () => this.cancelLockerHold());
+    this.root?.addEventListener('pointercancel', () => this.cancelLockerHold());
+    this.root?.addEventListener('pointerleave', () => this.cancelLockerHold());
+    this.root?.addEventListener('pointermove', (event) => {
+      if (this.lockerHold && Math.hypot(event.clientX - this.lockerHold.x, event.clientY - this.lockerHold.y) > 10) this.cancelLockerHold();
+    });
+    this.root?.addEventListener('contextmenu', (event) => {
+      if (event.target.closest?.('.locker-detail')) event.preventDefault();
+    });
+  }
+
+  onLockerPointerDown(event) {
+    this.cancelLockerHold();
+    this.lockerHoldOpened = null;
+    const detail = event.target.closest?.('.locker-detail');
+    if (!detail || (event.button != null && event.button !== 0)) return;
+    const key = detail.dataset.lockerDetail;
+    this.lockerHold = { key, x: event.clientX, y: event.clientY, colonistId: this.game.selection?.id };
+    this.lockerHoldTimer = setTimeout(() => {
+      if (!this.lockerHold || this.game.selection?.type !== 'colonist' || this.game.selection.id !== this.lockerHold.colonistId) return;
+      const current = this.root?.querySelector?.(`[data-locker-detail="${key}"]`);
+      if (current) { current.open = true; this.lockerHoldOpened = key; }
+    }, LOCKER_DETAIL_HOLD_MS);
+  }
+
+  cancelLockerHold() {
+    clearTimeout(this.lockerHoldTimer);
+    this.lockerHold = null;
   }
 
   onClick(event) {
+    if (this.lockerHoldOpened && event.target.closest?.('.locker-detail')?.dataset.lockerDetail === this.lockerHoldOpened) {
+      event.preventDefault();
+      this.lockerHoldOpened = null;
+      return;
+    }
     const m5Button = event.target.closest('[data-m5-action]');
     if (m5Button && this.game.ui?.m5Panels?.handleAction(m5Button.dataset.m5Action, m5Button)) return;
     const m4Button = event.target.closest('[data-m4-action]');
@@ -69,7 +115,12 @@ export class SelectionPanel {
     const selection = this.game.selection;
     const action = button.dataset.action;
     if (action === 'close') {
+      this.cancelLockerHold();
       this.game.select(null);
+      return;
+    }
+    if (selection?.type === 'colonist' && action === 'tokenBoard') {
+      openTokenBoard(this.game, Number(button.dataset.colonistId ?? selection.id));
       return;
     }
     if (selection?.type === 'colonist' && (action === 'workPriority' || action === 'autoPriorities')) {
@@ -90,7 +141,7 @@ export class SelectionPanel {
     } else if (action === 'prop') {
       // Le matériau choisi dans l'onglet Soutenir vaut aussi pour ce bouton.
       this.game.setTool({ type: 'support', excavationId, material: this.game.ui?.buildMenu?.propMaterial ?? 'wood' });
-    } else if (action === 'repair' || action === 'cancel' || action === 'toggleRoom') {
+    } else if (['repair', 'cancel', 'toggleRoom', 'evacuate', 'cancelEvacuation'].includes(action)) {
       this.game.ui.applyOrder({ type: action, excavationId });
     }
   }
@@ -147,7 +198,7 @@ export class SelectionPanel {
       const cause = report ? causePanel(report, this.game.sim, { embedded: true }) : '';
       const craft = this.game.sim.exodus?.craft;
       const cancel = craft?.excavationId === excavation.id ? exodusDepotPanel(this.game.sim, excavation) : '';
-      this.root.innerHTML = `${heading}<div class="badges"><span class="badge red">${escapeHtml(tr('collapsed'))}</span></div>${cause}${cancel}`;
+      this.root.innerHTML = `${heading}<div class="badges"><span class="badge red">${escapeHtml(tr('collapsed'))}</span></div>${rescuePanel(this.game.sim, excavation)}${cause}${cancel}`;
       return;
     }
     const stress = excavation.stress ?? evaluateExcavation(this.game.sim, excavation);
@@ -178,6 +229,7 @@ export class SelectionPanel {
       || (Number.isFinite(environment.co2) && environment.co2 > AIR.DANGER_CO2) ? 'red' : '';
     this.root.innerHTML = `${heading}
       <div class="badges"><span class="badge">${escapeHtml(tr(excavation.state))}</span><span class="badge ${color}">${escapeHtml(tr(statusKey))}</span>${environment.disabled ? `<span class="badge">${escapeHtml(tr(excavation.machineBroken ? 'machineBroken' : 'roomDisabled'))}</span>` : ''}${roomAlert ? `<span class="badge ${roomAlert.severity}">${escapeHtml(formatJournalEntry(roomAlert.entry, this.game.sim.excavations))}</span>` : ''}</div>
+      ${evacuationPanel(this.game.sim, excavation)}
       ${digWaitingAccess(this.game.sim, excavation) ? `<p class="panel-help dig-no-access">${escapeHtml(tr('digNoAccessHint'))}</p>` : ''}
       ${digHeldHint(this.game.sim, excavation) ? `<p class="panel-help dig-held">${escapeHtml(tr('digHeldHint'))}</p>` : ''}
       ${supportAdviceLine(this, excavation)}
@@ -225,33 +277,51 @@ export class SelectionPanel {
     }
     const model = colonistModel(colonist);
     const task = colonist.task === 'clearing' ? 'clearingRubble' : colonist.task ?? 'idle';
-    const skills = Object.entries(colonist.skills ?? {}).map(([key, value]) => fact(tr(`${key}Skill`), formatNumber(value, true))).join('');
     const carrying = colonist.carrying
       ? `<p class="carrying">${escapeHtml(tr('carryingResource', { value: `${tr(colonist.carrying.resource ?? colonist.carrying.key)} · ${formatNumber(colonist.carrying.amount ?? colonist.carrying.quantity ?? 0, true)}` }))}</p>`
       : '';
     const radiation = radiationDoseModel(colonist, this.game.sim.tick);
     const dose = fact(tr('dose'), `${formatDose(radiation.dose)} mSv`);
-    const age = Number.isFinite(colonist.age) ? fact(tr('age'), tr('years', { value: formatNumber(colonist.age, true) })) : '';
+    const age = Number.isFinite(colonist.age) ? fact(tr('age'), tr('years', { value: formatNumber(Math.floor(colonist.age), true) })) : '';
     const injuries = colonist.injuries?.length ? fact(tr('injuries'), conditionNames(colonist.injuries)) : '';
     const diseases = colonist.diseases?.length ? fact(tr('diseases'), conditionNames(colonist.diseases)) : '';
-    const carriedSouvenirs = souvenirsForColonist(this.game.sim, colonist.id).map((souvenir) => {
+    const carriedSouvenirs = (this.game.sim.m6?.souvenirs ?? []).filter(souvenir => souvenir.holderId === colonist.id).map((souvenir) => {
       const definition = SOUVENIR_DEFINITIONS[souvenir.type];
       return `<div class="m6-carrier-souvenir" data-souvenir-id="${souvenir.id}"><canvas class="souvenir-icon" data-souvenir-type="${escapeHtml(souvenir.type)}" data-souvenir-id="${souvenir.id}" width="40" height="40" aria-hidden="true"></canvas><div><strong>${escapeHtml(tr(definition?.nameKey ?? 'm6Souvenirs'))}</strong><p>${escapeHtml(tr(definition?.effectKey ?? 'm6Souvenirs'))}</p><small>${escapeHtml(tr('m6SouvenirAuthor', { name: souvenir.authorName }))}</small></div></div>`;
     }).join('');
     const souvenirSection = carriedSouvenirs ? `<section class="m6-carrier-souvenirs"><h3>${escapeHtml(tr('m6Souvenirs'))}</h3>${carriedSouvenirs}</section>` : '';
-    this.root.innerHTML = `<div class="panel-heading colonist-heading">${portraitMarkup(colonist)}<div><span class="eyebrow">${escapeHtml(tr('population'))}</span><h2>${escapeHtml(colonist.name)}</h2></div><button type="button" class="icon-button" data-action="close" aria-label="${escapeHtml(tr('closeSelection'))}">×</button></div>
-      <div class="facts">${fact(tr('task'), tr(task))}${age}${model.idleReason ? fact(tr('inactivityReason'), tr(model.idleReason)) : ''}${dose}${injuries}${diseases}</div>
-      <section class="dose-effects ${radiation.status}" data-radiation-effects><h3>${escapeHtml(tr('radiationEffects'))}</h3><span class="badge ${radiation.status === 'healthy' ? 'green' : radiation.status === 'high' ? 'yellow' : 'red'}">${escapeHtml(tr(radiation.labelKey))}</span>${radiation.effectKeys.map((key) => `<p>${escapeHtml(tr(key))}</p>`).join('')}</section>
-      <h3>${escapeHtml(tr('health'))}</h3>
+    const needsMarkup = `<details class="locker-needs" data-locker-detail="needs" data-locker-section="needs"><summary data-locker-focus="needs">${escapeHtml(tr('needs'))} · ${escapeHtml(tr('health'))}</summary>
       ${meter(tr('health'), model.health, model.health <= NEEDS.LOW_NEED_THRESHOLD ? 'red' : model.health <= 100 - NEEDS.LOW_NEED_THRESHOLD ? 'yellow' : 'green')}
       ${meter(tr('morale'), model.morale, model.morale <= NEEDS.LOW_NEED_THRESHOLD ? 'red' : model.morale <= 100 - NEEDS.LOW_NEED_THRESHOLD ? 'yellow' : 'green')}
-      <h3>${escapeHtml(tr('needs'))}</h3>
       ${model.needs.map((need) => meter(tr(need.key === 'air' ? 'airNeed' : need.key), need.value, need.severity)).join('')}
-      ${carrying}
-      ${skills ? `<h3>${escapeHtml(tr('skills'))}</h3><div class="facts skills">${skills}</div>` : ''}
-      ${souvenirSection}
-      ${colonistSocialPanel(this.game.sim, colonist)}
+      <div class="facts">${injuries}${diseases}</div></details>`;
+    const html = `<div class="panel-heading colonist-heading locker-heading" data-locker-section="identity">${portraitMarkup(colonist)}<div><span class="eyebrow">${escapeHtml(tr('lockerTitle'))}</span><h2>${escapeHtml(colonist.name)}</h2>${age}<p class="locker-before">${escapeHtml(formerTrade(colonist))}</p><small>${escapeHtml(tr(`lifeStage_${colonist.lifeStage ?? 'adult'}`))}</small></div><button type="button" class="icon-button" data-action="close" aria-label="${escapeHtml(tr('closeSelection'))}">×</button></div>
+      ${colonistTokenPanel(this.game.sim, colonist)}
+      <section data-locker-section="dosimeter" class="locker-dosimeter"><h3>${escapeHtml(tr('lockerDosimeter'))}</h3><div class="facts">${dose}</div>${colonistSkyHoursPanel(this.game.sim, colonist)}
+      <section class="dose-effects ${radiation.status}" data-radiation-effects><h3>${escapeHtml(tr('radiationEffects'))}</h3><span class="badge ${radiation.status === 'healthy' ? 'green' : radiation.status === 'high' ? 'yellow' : 'red'}">${escapeHtml(tr(radiation.labelKey))}</span>${radiation.effectKeys.map((key) => `<p>${escapeHtml(tr(key))}</p>`).join('')}</section>
+      </section><div class="facts locker-task">${fact(tr('task'), tr(task))}${model.idleReason ? fact(tr('inactivityReason'), tr(model.idleReason)) : ''}</div>${carrying}
+      ${colonistSocialPanel(this.game.sim, colonist, { needsMarkup, souvenirMarkup: souvenirSection })}
       ${colonist.deathReport ? causePanel(colonist.deathReport, this.game.sim, { embedded: true }) : ''}`;
+    // The panel refreshes while playing: an expanded figure or needs drawer must
+    // stay open, and keyboard focus must not jump back to the map every half second.
+    if (this.lockerHtml === html && this.lockerPersonId === id && this.root.querySelector?.('[data-locker-section="identity"]')) return;
+    const samePerson = this.lockerPersonId === id;
+    const openDetails = samePerson ? new Set(Array.from(this.root.querySelectorAll?.('details[data-locker-detail][open]') ?? []).map(node => node.dataset.lockerDetail)) : new Set();
+    const active = this.root.ownerDocument?.activeElement;
+    const focus = samePerson && this.root.contains?.(active) ? active : null;
+    const scrollTop = samePerson ? this.root.scrollTop : 0;
+    this.lockerHtml = html;
+    this.lockerPersonId = id;
+    this.root.innerHTML = html;
+    for (const node of this.root.querySelectorAll?.('details[data-locker-detail]') ?? []) node.open = openDetails.has(node.dataset.lockerDetail);
+    let focusSelector;
+    if (focus?.dataset?.lockerFocus) focusSelector = `[data-locker-focus="${focus.dataset.lockerFocus}"]`;
+    else if (focus?.dataset?.action) {
+      focusSelector = `[data-action="${focus.dataset.action}"]`;
+      if (focus.dataset.work) focusSelector += `[data-work="${focus.dataset.work}"][data-priority="${focus.dataset.priority}"]`;
+    }
+    if (focusSelector) this.root.querySelector?.(focusSelector)?.focus?.({ preventScroll: true });
+    this.root.scrollTop = scrollTop;
     paintPortrait(this.root, colonist, this.game.sim);
   }
 }

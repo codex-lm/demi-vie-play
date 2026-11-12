@@ -11,10 +11,16 @@ export const M6 = Object.freeze({
   LISTENING_ROCK_TICKS: 12,
 });
 
+// Palettes de l'interface : un bloc par nom dans src/ui/themes.css.
+export const M6_THEMES = Object.freeze(['shelter', 'blueprint', 'soot']);
+
 export const DEFAULT_M6_OPTIONS = Object.freeze({
   textScale: 0, // 0 = automatique, selon la taille de l'écran
+  theme: 'blueprint',
   colorblind: false,
   volume: 0.7,
   music: 0.5,
+  geiger: 0.5,
   reduceMotion: false,
+  veilleePause: true,
 });

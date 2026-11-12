@@ -226,7 +226,7 @@ export function pathCost(path) {
     : WORK.WALK_CELLS_PER_MINUTE), 0);
 }
 
-export function findPath(sim, start, goal, goalX, goalY) {
+export function findPath(sim, start, goal, goalX, goalY, options = null) {
   let origin;
   let requestedGoals;
   if (typeof start === 'number') {
@@ -242,13 +242,24 @@ export function findPath(sim, start, goal, goalX, goalY) {
   const startIndex = world.index(origin.x, origin.y);
   if (!nav.walkable[startIndex]) return [];
 
+  // Avoid evacuated rooms first, but keep them passable when no other route
+  // reaches an outside goal. Collapse rescue may also work from inside them.
+  // With no order these branches leave paths identical.
+  const forbidden = sim.evacuationCount && !options?.rescue ? sim.excavations.filter(room => room.evacuation
+    && room.id !== options?.evacuationSource) : [];
+  const permitted = (index) => {
+    const x = index % world.width, y = Math.floor(index / world.width);
+    return !forbidden.some(room => x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h
+      || world.cellExcavation[index] === room.id) && (!options?.allowed || options.allowed(x, y));
+  };
+  const restricted = forbidden.length > 0 || options?.allowed;
   const goalIndices = new Set();
   for (const requested of requestedGoals) {
     if (!requested) continue;
     const point = normalizePoint(requested);
     if (!world.inBounds(point.x, point.y)) continue;
     const index = world.index(point.x, point.y);
-    if (nav.walkable[index]) goalIndices.add(index);
+    if (nav.walkable[index] && (!restricted || permitted(index))) goalIndices.add(index);
   }
   if (goalIndices.size === 0) return [];
   if (goalIndices.has(startIndex)) {
@@ -351,8 +362,8 @@ export function findPath(sim, start, goal, goalX, goalY) {
   const visitStep = (to) => visit(stepFrom, to, stepCost);
 
   const visit = (from, to, cost) => {
-    if (nav.closed[to] === stamp) return;
-    const nextScore = nav.score[from] + cost;
+    if (nav.closed[to] === stamp || restricted && !options?.evacuationTransit && !permitted(to)) return;
+    const nextScore = nav.score[from] + cost + (options?.cost?.(to % world.width, Math.floor(to / world.width)) ?? 0);
     if (nav.seen[to] === stamp && nextScore >= nav.score[to]) return;
     nav.seen[to] = stamp;
     nav.score[to] = nextScore;
@@ -380,7 +391,13 @@ export function findPath(sim, start, goal, goalX, goalY) {
       forEachStep(nav, current, world.width, visitStep);
     }
   }
-  if (found < 0) return [];
+  if (found < 0) {
+    if (forbidden.length && !options?.allowed && !options?.evacuationTransit) {
+      return findPath(sim, typeof start === 'number' ? origin : start, requestedGoals, undefined, undefined,
+        { ...options, evacuationTransit: true });
+    }
+    return [];
+  }
 
   const reversed = [];
   let current = found;

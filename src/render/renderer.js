@@ -54,8 +54,9 @@ export class Renderer {
     ctx.fillRect(0, 0, this.width, this.height);
     const view = game.camera.view(now);
     // A paused scenario/save displays current positions, not a stale previous
-    // tick (notably the M6 teacher explicitly placed in the school).
-    view.alpha = game.speed === 0 ? 1 : alpha;
+    // tick (notably the M6 teacher explicitly placed in the school). A game
+    // paused in mid-tick keeps the share of the tick it was showing.
+    view.alpha = game.speed === 0 ? (game.pausedAlpha?.() ?? 1) : alpha;
     const motionTime = game.options?.reduceMotion ? 0 : now;
     view.now = motionTime;
     const shake = collapseShake(game, now);

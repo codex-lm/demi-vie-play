@@ -11,7 +11,10 @@ import { addToStock, createStock, isExodusStockReserved, recordReserveShift, res
 import { lawMultiplier } from './laws.js';
 import { createInitialColonists } from './colonists.js';
 import { createPersonProfile } from './people.js';
+import { nameSeededRecruit } from './identities.js';
 import { recordExpeditionMessage } from './radio.js';
+import { LEFT_OUTSIDE_RULES } from '../data/leftOutside.js';
+import { outsideDefinition, outsideItem, loseOutsideItem, recoverOutsideItem } from './leftOutside.js';
 
 export const ENCOUNTER_DIALOGUES = Object.freeze({
   survivors: Object.freeze({
@@ -261,20 +264,25 @@ export function siteFrostOutlook(sim, siteId) {
 
 export function previewExpedition(sim, order) {
   sim.expeditions.prepared = null;
-  const site = sim.surface.sites.find((candidate) => candidate.id === order.siteId && candidate.revealed);
-  const definition = siteDefinition(order.siteId);
+  const outside = order.outsideId ? outsideItem(sim, order.outsideId) : null;
+  const site = order.outsideId ? outside
+    : sim.surface.sites.find((candidate) => candidate.id === order.siteId && candidate.revealed);
+  const definition = order.outsideId ? outsideDefinition(sim, order.outsideId) : siteDefinition(order.siteId);
   const { ids: colonistIds, crew } = availableCrew(sim, order.colonistIds);
   if (!site || !definition || crew.length !== colonistIds.length
-    || crew.length < EXPEDITION.MIN_CREW || crew.length > EXPEDITION.MAX_CREW) return { ok: false, error: 'expeditionUnavailable' };
+    || crew.length < EXPEDITION.MIN_CREW
+    || crew.length > (outside ? LEFT_OUTSIDE_RULES.MAX_CREW : EXPEDITION.MAX_CREW)) return { ok: false, error: 'expeditionUnavailable' };
+  if (outside && (outside.status !== 'available' || sim.tick >= outside.deadlineTick)) return { ok: false, error: 'outsideUnavailable' };
   if (expeditionsBlocked(sim)) return { ok: false, error: 'expeditionWeatherBlocked' };
   const seasonal = sim.m5?.calendar ?? {};
   const frost = frostPreview(sim, seasonal, definition);
   const durationHours = definition.durationHours * (seasonal.durationFactor ?? 1);
   const durationTicks = Math.round(durationHours * TIME.TICKS_PER_HOUR);
+  if (outside && sim.tick + durationTicks >= outside.deadlineTick) return { ok: false, error: 'outsideTooLate' };
   const protection = suitProtection(sim, { suit: true });
   const dosePerPerson = surfaceDoseRate(sim, definition.x) * durationHours * (1 - protection);
   const preview = {
-    id: sim.expeditions.nextId,
+    id: outside ? `outside-${sim.leftOutside.nextId}` : sim.expeditions.nextId,
     previewTick: sim.tick,
     season: seasonal.season ?? null,
     siteId: definition.id,
@@ -287,6 +295,8 @@ export function previewExpedition(sim, order) {
     carryCapacity: colonistIds.length * EXPEDITION.CARRY_UNITS_PER_PERSON,
     encounterChance: definition.encounterChance,
     risks: ['radiation', definition.encounterChance >= 0.3 ? 'raiders' : 'injury'],
+    ...(outside ? { outsideId: outside.id, destinationX: definition.x, deadlineTick: outside.deadlineTick,
+      outsideWeather: sim.weather.current, outsideProtection: protection, risks: ['radiation'] } : {}),
     ...(frost ? { frost } : {}),
   };
   if (frost?.siteOutOfReach) return { ok: false, error: 'expeditionSeasonBlocked', preview, frost };
@@ -298,12 +308,20 @@ export function launchExpedition(sim, order) {
   const prepared = sim.expeditions.prepared;
   if (!prepared || prepared.id !== order.previewId) return { ok: false, error: 'expeditionPreviewRequired' };
   if (expeditionsBlocked(sim)) return { ok: false, error: 'expeditionWeatherBlocked' };
-  const definition = siteDefinition(prepared.siteId);
+  const outside = prepared.outsideId ? outsideItem(sim, prepared.outsideId) : null;
+  const definition = prepared.outsideId ? outsideDefinition(sim, prepared.outsideId) : siteDefinition(prepared.siteId);
+  if (prepared.outsideId && (!outside || outside.status !== 'available')) return { ok: false, error: 'outsideUnavailable' };
+  if (outside && sim.tick + prepared.durationTicks >= outside.deadlineTick) return { ok: false, error: 'outsideTooLate' };
   const seasonal = sim.m5?.calendar ?? {};
-  if (seasonal.longExpeditionsBlocked && definition.durationHours > (seasonal.maxExpeditionHours ?? Infinity)) {
+  if (outside && (prepared.outsideWeather !== sim.weather.current
+    || prepared.outsideProtection !== suitProtection(sim, { suit: true })
+    || prepared.durationHours !== definition.durationHours * (seasonal.durationFactor ?? 1))) {
+    return { ok: false, error: 'expeditionPreviewRequired' };
+  }
+  if (definition && seasonal.longExpeditionsBlocked && definition.durationHours > (seasonal.maxExpeditionHours ?? Infinity)) {
     return { ok: false, error: 'expeditionSeasonBlocked' };
   }
-  const site = sim.surface.sites.find((candidate) => candidate.id === prepared.siteId && candidate.revealed);
+  const site = outside ?? sim.surface.sites.find((candidate) => candidate.id === prepared.siteId && candidate.revealed);
   const { ids, crew } = availableCrew(sim, prepared.colonistIds);
   if (!definition || !site || ids.length !== prepared.colonistIds.length || crew.length !== ids.length) {
     return { ok: false, error: 'expeditionUnavailable' };
@@ -312,6 +330,7 @@ export function launchExpedition(sim, order) {
   const id = prepared.id;
   const expedition = {
     id,
+    ...(outside ? { outsideId: outside.id } : {}),
     siteId: prepared.siteId,
     colonistIds: [...prepared.colonistIds],
     state: 'outbound',
@@ -333,9 +352,17 @@ export function launchExpedition(sim, order) {
       destinationX: definition.x,
     }),
   };
-  sim.expeditions.nextId += 1;
+  if (outside) {
+    sim.leftOutside.nextId += 1;
+    outside.status = 'outbound';
+    outside.expeditionId = id;
+  } else sim.expeditions.nextId += 1;
   sim.expeditions.prepared = null;
   sim.expeditions.active.push(expedition);
+  if (outside) {
+    sim.log('info', 'eventOutsideDeparture', { outsideId: outside.id, count: crew.length, dose: prepared.dosePerPerson });
+    return { ok: true, expedition };
+  }
   sim.log('info', 'eventExpeditionDeparture', {
     site: prepared.siteId,
     siteId: prepared.siteId,
@@ -371,6 +398,7 @@ function beginReturn(expedition, sim) {
   expedition.state = 'returning';
   expedition.returnTick = sim.tick;
   sendSurfaceCrewHome(expedition.crew);
+  if (expedition.outsideId) return;
   recordExpeditionMessage(sim, expedition, 'radioExpeditionReturn', {
     site: tr(`site_${expedition.siteId}`),
     loot: lootText(expedition.loot) || tr('none'),
@@ -378,6 +406,23 @@ function beginReturn(expedition, sim) {
 }
 
 function resolveSite(sim, expedition) {
+  if (expedition.outsideId) {
+    const item = outsideItem(sim, expedition.outsideId);
+    const definition = outsideDefinition(sim, expedition.outsideId);
+    expedition.siteResolved = true;
+    expedition.resolvedTick = sim.tick;
+    if (item?.status === 'outbound' && sim.tick < item.deadlineTick) {
+      item.status = 'secured';
+      item.securedTick = sim.tick;
+      expedition.loot = { ...definition.reward };
+      expedition.recruitPending = Boolean(definition.recruit);
+    } else {
+      loseOutsideItem(sim, expedition.outsideId);
+      expedition.loot = {};
+    }
+    beginReturn(expedition, sim);
+    return;
+  }
   recordExpeditionMessage(sim, expedition, 'radioExpeditionArrived', {
     site: tr(`site_${expedition.siteId}`), dose: averageCrewDose(sim, expedition),
   });
@@ -507,7 +552,7 @@ function addRecruit(sim, expedition, averageDose) {
     ...template,
     ...createPersonProfile(sim.seed, id),
     id,
-    name: template.name,
+    name: expedition.outsideId ? tr('outsideNeighborName') : template.name,
     bedIndex: id,
     bedX: x,
     bedY: y,
@@ -520,6 +565,7 @@ function addRecruit(sim, expedition, averageDose) {
     direction: id % 2 === 0 ? 1 : -1,
     animation: id * 0.7,
   };
+  if (sim.seededIdentities && expedition.outsideId) nameSeededRecruit(sim, recruit);
   sim.nextColonistId = id + 1;
   sim.colonists.push(recruit);
   addDose(sim, recruit, averageDose, 'surface');
@@ -545,7 +591,12 @@ function abortExpedition(sim, expedition) {
       && candidate.encounter?.choiceIndex === null).sort((a, b) => a.id - b.id)[0];
     sim.expeditions.pendingEncounter = next?.encounter ?? null;
   }
-  sim.expeditions.history.push({ id: expedition.id, siteId: expedition.siteId, completedTick: sim.tick, state: 'lost', loot: null });
+  sim.expeditions.history.push({ id: expedition.id, siteId: expedition.siteId, completedTick: sim.tick, state: 'lost', loot: null,
+    ...(expedition.outsideId ? { outsideId: expedition.outsideId } : {}) });
+  if (expedition.outsideId) {
+    loseOutsideItem(sim, expedition.outsideId);
+    return;
+  }
   sim.log('error', 'eventExpeditionLost', { site: expedition.siteId, siteId: expedition.siteId });
 }
 
@@ -562,7 +613,7 @@ function completeExpedition(sim, expedition) {
   expedition.state = 'returned';
   expedition.completedTick = sim.tick;
   expedition.averageDose = averageDose;
-  sim.expeditions.completed += 1;
+  if (!expedition.outsideId) sim.expeditions.completed += 1;
   const site = sim.surface.sites.find((candidate) => candidate.id === expedition.siteId);
   if (site && expedition.siteResolved) depleteSite(sim, site);
   const record = {
@@ -579,6 +630,17 @@ function completeExpedition(sim, expedition) {
     recruitId: expedition.recruitId,
   };
   sim.expeditions.history.push(record);
+  if (expedition.outsideId) {
+    record.outsideId = expedition.outsideId;
+    if (!recoverOutsideItem(sim, expedition)) {
+      const item = outsideItem(sim, expedition.outsideId);
+      if (item?.status === 'outbound') {
+        item.status = 'available';
+        delete item.expeditionId;
+      }
+    }
+    return;
+  }
   sim.log('info', 'eventExpeditionReturn', {
     site: expedition.siteId,
     siteId: expedition.siteId,
@@ -601,6 +663,10 @@ export function updateExpeditions(sim) {
       continue;
     }
     updateSurfaceCrew(sim, expedition.crew);
+    if (expedition.outsideId && outsideItem(sim, expedition.outsideId)?.status === 'lost' && expedition.state !== 'returning') {
+      expedition.loot = {};
+      beginReturn(expedition, sim);
+    }
     if (expedition.crew.childRecall && expedition.state !== 'returning') {
       beginReturn(expedition, sim);
       if (sim.expeditions.pendingEncounter?.expeditionId === expedition.id) sim.expeditions.pendingEncounter = null;

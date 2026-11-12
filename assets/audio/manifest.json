@@ -1,3 +1,199 @@
 {
-  "entries": []
+  "version": 1,
+  "status": "public-edition",
+  "scope": "Musiques seules ; les autres sons sont produits dans le navigateur.",
+  "entries": [
+    {
+      "id": "music.title",
+      "kind": "music",
+      "loop": true,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.title.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.title-v1.ogg",
+            "mp3": "assets/audio/music/music.title-v1.mp3"
+          },
+          "durationSeconds": 119.5,
+          "bytes": {
+            "ogg": 1345510,
+            "mp3": 1434793
+          }
+        }
+      ]
+    },
+    {
+      "id": "music.spring",
+      "kind": "music",
+      "loop": true,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.spring.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.spring-v1.ogg",
+            "mp3": "assets/audio/music/music.spring-v1.mp3"
+          },
+          "durationSeconds": 68.86,
+          "bytes": {
+            "ogg": 807358,
+            "mp3": 827289
+          }
+        }
+      ]
+    },
+    {
+      "id": "music.winter",
+      "kind": "music",
+      "loop": true,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.winter.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.winter-v1.ogg",
+            "mp3": "assets/audio/music/music.winter-v1.mp3"
+          },
+          "durationSeconds": 119.5,
+          "bytes": {
+            "ogg": 1247378,
+            "mp3": 1434793
+          }
+        },
+        {
+          "id": "music.winter.v2",
+          "files": {
+            "ogg": "assets/audio/music/music.winter-v2.ogg",
+            "mp3": "assets/audio/music/music.winter-v2.mp3"
+          },
+          "durationSeconds": 119.5,
+          "bytes": {
+            "ogg": 1288450,
+            "mp3": 1434793
+          }
+        }
+      ]
+    },
+    {
+      "id": "music.firstSky",
+      "kind": "music",
+      "loop": false,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.firstSky.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.firstSky-v1.ogg",
+            "mp3": "assets/audio/music/music.firstSky-v1.mp3"
+          },
+          "durationSeconds": 154.84,
+          "bytes": {
+            "ogg": 1770336,
+            "mp3": 1858917
+          }
+        }
+      ]
+    },
+    {
+      "id": "music.work",
+      "kind": "music",
+      "loop": true,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.work.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.work-v1.ogg",
+            "mp3": "assets/audio/music/music.work-v1.mp3"
+          },
+          "durationSeconds": 107.38,
+          "bytes": {
+            "ogg": 1259510,
+            "mp3": 1289343
+          }
+        },
+        {
+          "id": "music.work.v2",
+          "files": {
+            "ogg": "assets/audio/music/music.work-v2.ogg",
+            "mp3": "assets/audio/music/music.work-v2.mp3"
+          },
+          "durationSeconds": 101.5,
+          "bytes": {
+            "ogg": 1246139,
+            "mp3": 1218813
+          }
+        }
+      ]
+    },
+    {
+      "id": "music.evening",
+      "kind": "music",
+      "loop": true,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.evening.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.evening-v1.ogg",
+            "mp3": "assets/audio/music/music.evening-v1.mp3"
+          },
+          "durationSeconds": 119.5,
+          "bytes": {
+            "ogg": 1271509,
+            "mp3": 1434793
+          }
+        }
+      ]
+    },
+    {
+      "id": "music.danger",
+      "kind": "music",
+      "loop": true,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.danger.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.danger-v1.ogg",
+            "mp3": "assets/audio/music/music.danger-v1.mp3"
+          },
+          "durationSeconds": 89.1,
+          "bytes": {
+            "ogg": 997635,
+            "mp3": 1069915
+          }
+        }
+      ]
+    },
+    {
+      "id": "music.birth",
+      "kind": "music",
+      "loop": false,
+      "volume": 0.35,
+      "targetLufs": -16,
+      "variants": [
+        {
+          "id": "music.birth.v1",
+          "files": {
+            "ogg": "assets/audio/music/music.birth-v1.ogg",
+            "mp3": "assets/audio/music/music.birth-v1.mp3"
+          },
+          "durationSeconds": 31.56,
+          "bytes": {
+            "ogg": 367485,
+            "mp3": 379655
+          }
+        }
+      ]
+    }
+  ]
 }

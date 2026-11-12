@@ -15,6 +15,7 @@ import { updateReserves } from './reserves.js';
 import { ensureRescueAlert, updateAlerts } from './alerts.js';
 import { cancelRoomRescue, updateRescues } from './collapseRescue.js';
 import { initializePeople } from './people.js';
+import { initializeSeededIdentities } from './identities.js';
 import { refreshMoraleCauses, updateMorale } from './morale.js';
 import { updateLifecycle } from './lifecycle.js';
 import { initializeLaws, signLaw, updateLaws } from './laws.js';
@@ -27,7 +28,10 @@ import { initializeExpeditions, launchExpedition, previewExpedition, chooseEncou
 import { previewSurfaceConstruction, startSurfaceConstruction, updateSurfaceStructures } from './surfaceStructures.js';
 import { cancelKitCraft, initializeExodus, launchExodus, previewExodus, startKitCraft, updateExodus } from './exodus.js';
 import { applyM5, captureJournal, initializeM5, updateM5, updateM5Clock } from './m5.js';
+import { evacuateRoom, cancelEvacuation, restoreEvacuations, updateEvacuations } from './evacuation.js';
 import { initializeM6, recordM6Order, updateM6 } from './m6.js';
+import { initializeLeftOutside, updateLeftOutside } from './leftOutside.js';
+import { engraveVeillee, initializeVeillee, updateVeillee } from './veillee.js';
 
 export class Sim {
   constructor(seed = 1, options = {}) {
@@ -62,7 +66,9 @@ export class Sim {
     } else {
       this.world = new World();
     }
+    if (options.seededIdentities === true && !options.empty) this.seededIdentities = true;
     initializePeople(this);
+    if (this.seededIdentities) initializeSeededIdentities(this);
     initializeLaws(this);
     initializeResearch(this);
     initializeRadiation(this);
@@ -72,6 +78,8 @@ export class Sim {
     initializeExodus(this);
     initializeM5(this, options);
     initializeM6(this, options);
+    initializeLeftOutside(this, options);
+    initializeVeillee(this, options);
     updateReserves(this);
     updateAlerts(this);
     refreshMoraleCauses(this);
@@ -92,13 +100,18 @@ export class Sim {
 
   apply(order) {
     if (!order || typeof order.type !== 'string') return { ok: false, error: 'invalidPlacement' };
+    if (order.type === 'veilleeEngrave') return engraveVeillee(this, order);
     const m5Result = applyM5(this, order);
     if (m5Result) {
       recordM6Order(this, order, m5Result);
       return m5Result;
     }
     let result = { ok: false, error: 'invalidPlacement' };
-    if (order.type === 'dig') {
+    if (order.type === 'evacuate') {
+      result = evacuateRoom(this, this.excavation(order.excavationId));
+    } else if (order.type === 'cancelEvacuation') {
+      result = cancelEvacuation(this, this.excavation(order.excavationId));
+    } else if (order.type === 'dig') {
       // Soutènement choisi mais impayable ou verrouillé : refuser l'ordre avant
       // de planifier quoi que ce soit, avec la raison, plutôt que creuser nu.
       const liningReady = digLiningAvailable(this, order);
@@ -235,6 +248,7 @@ export class Sim {
       updateIndustry(this);
       updateRadiation(this);
       updateColonists(this);
+      if (this.leftOutside) updateLeftOutside(this);
       updateExpeditions(this);
       updateM5(this);
       updateSurfaceStructures(this);
@@ -246,13 +260,15 @@ export class Sim {
       updateReserves(this);
       updateRescues(this);
       updateAlerts(this);
+      if (this.veillee) updateVeillee(this);
+      updateEvacuations(this);
       if (this.structureDirty) updateStructure(this);
       this.events = this.events.filter((event) => this.tick - event.tick < TIME.TICKS_PER_DAY);
     }
     return this;
   }
 
-  serialize() {
+  serialize({ presentation = true } = {}) {
     initializePeople(this);
     refreshMoraleCauses(this);
     initializeLaws(this);
@@ -295,11 +311,16 @@ export class Sim {
       exodus: this.exodus ?? null,
       m5: this.m5 ?? null,
       m6: this.m6 ?? null,
+      ...(this.leftOutside ? { leftOutside: this.leftOutside } : {}),
+      ...(this.veillee ? { veillee: this.veillee } : {}),
+      ...(this.seededIdentities ? { seededIdentities: true } : {}),
+      ...(this.rescueRelationsEnabled ? { rescueRelationsEnabled: true } : {}),
+      ...(presentation && this.rescueNarrative ? { rescueNarrative: this.rescueNarrative } : {}),
     });
   }
 
   digest() {
-    return fnv1a(this.serialize());
+    return fnv1a(this.serialize({ presentation: false }));
   }
 
   static deserialize(serialized) {
@@ -313,6 +334,9 @@ export class Sim {
     sim.world = World.deserialize(data.world);
     sim.nextExcavationId = data.nextExcavationId;
     sim.excavations = data.excavations;
+    restoreEvacuations(sim);
+    if (data.rescueRelationsEnabled) sim.rescueRelationsEnabled = true;
+    if (data.rescueNarrative) sim.rescueNarrative = data.rescueNarrative;
     sim.colonists = data.colonists;
     sim.jobs = data.jobs;
     sim.nextJobId = data.nextJobId;
@@ -347,6 +371,9 @@ export class Sim {
     sim.exodus = data.exodus ?? null;
     sim.m5 = data.m5 ?? null;
     sim.m6 = data.m6 ?? null;
+    if (data.leftOutside?.enabled) sim.leftOutside = data.leftOutside;
+    if (data.veillee?.enabled) sim.veillee = data.veillee;
+    if (data.seededIdentities === true) sim.seededIdentities = true;
     initializePeople(sim);
     initializeLaws(sim);
     initializeResearch(sim);

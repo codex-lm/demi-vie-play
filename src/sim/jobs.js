@@ -1,3 +1,5 @@
+import { evacuatedAt, jobEvacuated } from './evacuation.js';
+import { recordRescueDig } from './rescueNarrative.js';
 import { AIR, CELL, CULTIVATION, EXCAVATION, NEEDS, SHAPES, STRUCTURE, TIME, WATER, WORK, WORLD } from '../data/balance.js';
 import { M6 } from '../data/m6.js';
 import { PEOPLE } from '../data/people.js';
@@ -1220,6 +1222,14 @@ export function isLifeSupportJob(sim, job) {
 
 export function canWork(sim, colonist, job) {
   if (!colonist || !job) return false;
+  if (sim.evacuationCount) {
+    if (colonist.evacuationJobId != null) return false;
+    const destination = colonist.path?.at(-1);
+    const crossing = colonist.jobId === job.id && destination && colonist.pathIndex < colonist.path.length
+      && !evacuatedAt(sim, destination.x, destination.y);
+    if (!isRescueJob(sim, job) && (colonist.evacuationFrom != null || jobEvacuated(sim, job)
+      || evacuatedAt(sim, colonist.x, colonist.y) && !crossing)) return false;
+  }
   if (colonist.trappedIn != null) return false;
   if ((colonist.age ?? PEOPLE.ADULT_AGE) < PEOPLE.MINIMUM_WORK_AGE) return false;
   if (colonist.surfaceCrewId || (colonist.age ?? 1) < 1 || colonist.carriedBy != null) return false;
@@ -1266,7 +1276,8 @@ function digAssignmentScore(sim, colonist, job) {
   const currentX = Math.round(colonist.x);
   const currentY = Math.round(colonist.y);
   const travel = targets.some((target) => target.x === currentX && target.y === currentY)
-    ? 0 : pathCost(findPath(sim, colonist, targets));
+    ? 0 : pathCost(findPath(sim, colonist, targets, undefined, undefined,
+      sim.evacuationCount && isRescueJob(sim, job) ? { rescue: true } : null));
   const priority = Math.max(1, assignmentPriority(sim, colonist, job));
   // A cell handed out under the reserved rock of its own room (rule C) opens
   // only after that rock: the rock above, which holds the face back, is
@@ -1339,7 +1350,7 @@ function productionHasInputs(sim, job) {
 
 function usableRoom(excavation) {
   return excavation && (excavation.state === 'fitted' || (excavation.initial && excavation.roomType))
-    && excavation.state !== 'collapsed' && !excavation.disabled && (excavation.floodRatio ?? 0) <= WATER.FLOOD_UNUSABLE_RATIO;
+    && excavation.state !== 'collapsed' && !excavation.disabled && !excavation.evacuation && (excavation.floodRatio ?? 0) <= WATER.FLOOD_UNUSABLE_RATIO;
 }
 
 function stockTransfer(sim, source, destination, resource, amount, excavationId, parallel = false, parentJobId = null) {
@@ -1559,6 +1570,7 @@ export function updateJobs(sim) {
   }
   for (const excavation of sim.excavations) {
     excavation.productionWorkers = 0;
+    if (excavation.evacuation) continue;
     replenishDigJobs(sim, excavation);
     ensureHaulJobs(sim, excavation);
     ensureProductionJobs(sim, excavation);
@@ -1904,7 +1916,8 @@ function canWorkCell(sim, colonist, excavation, x, y) {
   if (openDigReach(sim, currentX, currentY, x, y, excavation.h + 1, plannedCells) && isWalkable(sim, currentX, currentY)
     && !overDrop(sim, excavation, x, y, currentX, currentY, nav, colonist)
     && !standCutOff(sim, excavation, x, y, currentX, currentY, nav)) return true;
-  return findPath(sim, colonist, digTargets(sim, excavation, colonist, x, y)).length > 0;
+  return findPath(sim, colonist, digTargets(sim, excavation, colonist, x, y), undefined, undefined,
+    sim.evacuationCount && isRescueJob(sim, { type: 'dig', excavationId: excavation.id }) ? { rescue: true } : null).length > 0;
 }
 
 function prepareDig(sim, colonist, job) {
@@ -2028,6 +2041,7 @@ function haulAlternativeUsable(sim, job, candidate, destination) {
 // destination, quel que soit le colon, elle est abandonnée lisiblement ; elle
 // n'est pas recréée, puisque sa création exige une telle source.
 function dropUnfeasibleHaul(sim, job) {
+  if (jobEvacuated(sim, job)) return;
   if (job.type !== 'stockHaul' || job.status !== 'queued' || job.phase !== 'pickup') return;
   const destination = sim.stocks.find((stock) => stock.id === job.destinationStockId);
   const source = sim.stocks.find((stock) => stock.id === job.sourceStockId);
@@ -2283,6 +2297,7 @@ function performDig(sim, colonist, job, excavation) {
   }
   const materialKey = materialAt(sim.world.materials[index]).key;
   digCell(sim, excavation, x, y);
+  recordRescueDig(sim, excavation, colonist);
   colonist.materialCounts ??= {};
   colonist.materialCounts[materialKey] = (colonist.materialCounts[materialKey] ?? 0) + 1;
   delete excavation.work[index];

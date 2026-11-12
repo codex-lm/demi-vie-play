@@ -66,6 +66,7 @@ export function colonistAppearance(sim, colonist) {
   const features = portraitFeatures(colonist);
   return {
     seed: colonistArtSeed(colonist), age: colonistArtAge(colonist), job: colonistArtJob(sim, colonist),
+    sex: colonist?.sex,
     // Saved skin pigments are retained in both renderers; geometry comes from the art seed.
     skin: SKIN_TONES[features.skin],
     mood: colonist?.moraleValue ?? colonist?.morale ?? 60,

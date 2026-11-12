@@ -1,9 +1,11 @@
-import { DEFAULT_M6_OPTIONS, M6 } from '../data/m6.js';
+import { DEFAULT_M6_OPTIONS, M6, M6_THEMES } from '../data/m6.js';
+import { DEFAULT_SPEED } from '../data/speeds.js';
 import { getLanguage, setLanguage, tr } from '../data/strings.fr.js';
+import { Sim } from '../sim/sim.js';
+import { OpeningSequence } from './opening.js';
 
 export const DEFAULT_OPTIONS = DEFAULT_M6_OPTIONS;
 
-const STORYTELLERS = Object.freeze(['veilleur', 'chroniqueur', 'implacable']);
 // 0 = automatique : la taille suit l'écran (portable, 2K, 4K).
 const TEXT_SCALES = Object.freeze([0, 75, 85, 100, 115, 130, 150, 175, 200, 225, 250]);
 const MANUAL_TEXT_SCALES = TEXT_SCALES.filter((scale) => scale > 0);
@@ -59,12 +61,15 @@ function defaultStorage() {
   }
 }
 
-export function loadLanguage(storage = defaultStorage()) {
+export function loadLanguage(storage = defaultStorage(), navigatorLike = globalThis.navigator) {
   try {
-    return storage?.getItem(M6.LANGUAGE_KEY) === 'fr' ? 'fr' : 'en';
+    const stored = storage?.getItem(M6.LANGUAGE_KEY);
+    if (stored === 'fr' || stored === 'en') return stored;
   } catch {
-    return 'en';
+    // A blocked storage must not discard the browser's preferred language.
   }
+  const preferred = navigatorLike?.languages?.[0] ?? navigatorLike?.language ?? 'en';
+  return /^fr(?:-|$)/i.test(preferred) ? 'fr' : 'en';
 }
 
 export function applyGameLanguage(language) {
@@ -78,18 +83,33 @@ export function applyGameLanguage(language) {
   }
 }
 
+// Palette de l'interface : <html data-theme="…"> choisit le bloc de src/ui/themes.css.
+export function applyTheme(theme) {
+  const root = globalThis.document?.documentElement;
+  if (!root) return;
+  root.setAttribute?.('data-theme', M6_THEMES.includes(theme) ? theme : DEFAULT_OPTIONS.theme);
+}
+
+function themeNameKey(id) {
+  return `m6Theme${id[0].toUpperCase()}${id.slice(1)}`;
+}
+
 function normalizeOptions(options = {}) {
   const source = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   const number = (value) => typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
   const textScale = number(source.textScale);
   const volume = number(source.volume);
   const music = number(source.music);
+  const geiger = number(source.geiger);
   return {
     textScale: TEXT_SCALES.includes(textScale) ? textScale : DEFAULT_OPTIONS.textScale,
+    theme: M6_THEMES.includes(source.theme) ? source.theme : DEFAULT_OPTIONS.theme,
     colorblind: typeof source.colorblind === 'boolean' ? source.colorblind : DEFAULT_OPTIONS.colorblind,
     volume: Number.isFinite(volume) && volume >= 0 && volume <= 1 ? volume : DEFAULT_OPTIONS.volume,
     music: Number.isFinite(music) && music >= 0 && music <= 1 ? music : DEFAULT_OPTIONS.music,
+    geiger: Number.isFinite(geiger) && geiger >= 0 && geiger <= 1 ? geiger : DEFAULT_OPTIONS.geiger,
     reduceMotion: typeof source.reduceMotion === 'boolean' ? source.reduceMotion : DEFAULT_OPTIONS.reduceMotion,
+    veilleePause: typeof source.veilleePause === 'boolean' ? source.veilleePause : DEFAULT_OPTIONS.veilleePause,
   };
 }
 
@@ -120,28 +140,15 @@ export function saveM6Options(options, storage) {
   return { ...normalized };
 }
 
-function storytellerNameKey(id) {
-  return `m6Storyteller${id[0].toUpperCase()}${id.slice(1)}`;
-}
-
 export function titleMarkup(model = {}) {
   const seed = model.seed ?? 1;
-  const selected = STORYTELLERS.includes(model.storyteller) ? model.storyteller : 'chroniqueur';
   const hasSave = Boolean(model.hasSave ?? model.canContinue);
   const credits = Boolean(model.credits);
-  const choices = STORYTELLERS.map((id) => {
-    const nameKey = storytellerNameKey(id);
-    return `<button type="button" class="m6-storyteller-choice ${id === selected ? 'selected' : ''}" data-storyteller-choice="${id}" aria-pressed="${id === selected}">
-      <canvas class="storyteller-portrait" data-storyteller="${id}" data-art="drawStorytellerPortrait" role="img" aria-label="${escapeHtml(tr(nameKey))}"></canvas>
-      <strong>${escapeHtml(tr(nameKey))}</strong><span>${escapeHtml(tr(`${nameKey}Description`))}</span>
-    </button>`;
-  }).join('');
   return `<div class="m6-title-layout" data-m6-title-main ${credits ? 'hidden' : ''}>
     <canvas class="title-scene" data-art="drawTitleScene" aria-hidden="true"></canvas>
     <div class="m6-title-content">
       <canvas class="title-logo" data-art="drawLogo" role="img" aria-label="${escapeHtml(tr('m6TitleLogo'))}"></canvas>
       <h1>${escapeHtml(tr('m6Title'))}</h1><p>${escapeHtml(tr('m6Subtitle'))}</p>
-      <fieldset class="m6-storytellers"><legend>${escapeHtml(tr('m6StorytellerLabel'))}</legend>${choices}</fieldset>
       <label class="m6-seed-label">${escapeHtml(tr('m6SeedLabel'))}<input type="text" inputmode="numeric" data-m6-seed value="${escapeHtml(seed)}" aria-label="${escapeHtml(tr('m6SeedLabel'))}"></label>
       <button type="button" data-m6-action="randomSeed">${escapeHtml(tr('m6RandomSeed'))}</button>
       <div class="m6-title-actions">
@@ -169,17 +176,21 @@ export function optionsMarkup(options = DEFAULT_OPTIONS, width, height) {
       : selected && scale > max ? tr('m6TextScaleLimited', { value: scale, actual: max }) : `${scale} %`;
     return `<option value="${scale}"${selected ? ' selected' : ''}${scale > max ? ' disabled' : ''}>${escapeHtml(label)}</option>`;
   }).join('');
+  const themes = M6_THEMES.map((theme) => `<option value="${theme}"${theme === values.theme ? ' selected' : ''}>${escapeHtml(tr(themeNameKey(theme)))}</option>`).join('');
   return `<section class="m6-options-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(tr('m6OptionsTitle'))}">
     <h2>${escapeHtml(tr('m6OptionsTitle'))}</h2>
     <label>${escapeHtml(tr('m6Language'))}<select data-m6-option="language">
       <option value="en" lang="en"${language === 'en' ? ' selected' : ''}>English</option>
       <option value="fr" lang="fr"${language === 'fr' ? ' selected' : ''}>Français</option>
     </select></label>
+    <label>${escapeHtml(tr('m6Theme'))}<select data-m6-option="theme">${themes}</select></label>
     <label>${escapeHtml(tr('m6TextScale'))}<select data-m6-option="textScale">${scales}</select></label>
     <label class="m6-check"><input type="checkbox" data-m6-option="colorblind" ${values.colorblind ? 'checked' : ''}><span>${escapeHtml(tr('m6Colorblind'))}</span></label>
     <label>${escapeHtml(tr('m6Volume'))}<input type="range" min="0" max="1" step="0.05" value="${values.volume}" data-m6-option="volume"></label>
     <label>${escapeHtml(tr('m6Music'))}<input type="range" min="0" max="1" step="0.05" value="${values.music}" data-m6-option="music"></label>
+    <label>${escapeHtml(tr('m6Geiger'))}<input type="range" min="0" max="1" step="0.05" value="${values.geiger}" data-m6-option="geiger"></label>
     <label class="m6-check"><input type="checkbox" data-m6-option="reduceMotion" ${values.reduceMotion ? 'checked' : ''}><span>${escapeHtml(tr('m6ReduceMotion'))}</span></label>
+    <label class="m6-check"><input type="checkbox" data-m6-option="veilleePause" ${values.veilleePause ? 'checked' : ''}><span>${escapeHtml(tr('veilleePause'))}</span></label>
     <button type="button" data-m6-action="closeOptions">${escapeHtml(tr('m6Back'))}</button>
   </section>`;
 }
@@ -227,12 +238,14 @@ export class M6Shell {
     this.optionsVisible = false;
     this.creditsOpen = false;
     this.optionsReturnTo = showTitle ? 'title' : 'pause';
-    this.previousSpeed = game.speed > 0 ? game.speed : game.previousSpeed || 1;
+    this.previousSpeed = game.speed > 0 ? game.speed : game.previousSpeed || DEFAULT_SPEED;
     this.game.options = loadM6Options(storage);
     this.root = null;
     this.titleRoot = null;
     this.pauseRoot = null;
     this.optionsRoot = null;
+    this.openingRoot = null;
+    this.opening = null;
     this.titleSignature = '';
     this.optionsSignature = '';
     this.createRoots();
@@ -256,7 +269,11 @@ export class M6Shell {
     this.optionsRoot = document.createElement('div');
     this.optionsRoot.className = 'm6-options-screen';
     this.optionsRoot.dataset.m6Screen = 'options';
-    this.root.append(this.titleRoot, this.pauseRoot, this.optionsRoot);
+    this.openingRoot = document.createElement('div');
+    this.openingRoot.className = 'm6-opening-screen';
+    this.openingRoot.dataset.m6Screen = 'opening';
+    this.openingRoot.hidden = true;
+    this.root.append(this.titleRoot, this.pauseRoot, this.optionsRoot, this.openingRoot);
     (document.body ?? document.documentElement)?.append(this.root);
     this.root.addEventListener('click', (event) => this.onClick(event));
     this.root.addEventListener('input', (event) => this.onInput(event));
@@ -266,6 +283,7 @@ export class M6Shell {
   applyOptions() {
     this.game.options = normalizeOptions(this.game.options);
     const document = globalThis.document;
+    applyTheme(this.game.options.theme);
     this.textScale = effectiveTextScale(this.game.options);
     document?.documentElement?.style?.setProperty('--m6-text-scale', String(this.textScale / 100));
     this.game.ui?.refreshInterfaceScale?.(this.textScale,
@@ -314,6 +332,7 @@ export class M6Shell {
   }
 
   showTitle() {
+    this.closeOpening();
     if (!this.titleVisible && this.game.speed > 0) this.previousSpeed = this.game.speed;
     this.titleVisible = true;
     this.pauseVisible = false;
@@ -325,6 +344,7 @@ export class M6Shell {
   }
 
   hideTitle() {
+    this.closeOpening();
     this.titleVisible = false;
     this.creditsOpen = false;
     if (this.optionsReturnTo === 'title') this.optionsVisible = false;
@@ -333,7 +353,7 @@ export class M6Shell {
 
   openPause() {
     if (this.titleVisible || this.game.sim?.exodus?.result) return false;
-    this.previousSpeed = this.game.speed > 0 ? this.game.speed : this.game.previousSpeed || this.previousSpeed || 1;
+    this.previousSpeed = this.game.speed > 0 ? this.game.speed : this.game.previousSpeed || this.previousSpeed || DEFAULT_SPEED;
     this.setSpeed(0);
     this.pauseVisible = true;
     this.optionsVisible = false;
@@ -347,12 +367,13 @@ export class M6Shell {
     if (this.titleVisible || this.game.sim?.exodus?.result) return false;
     this.pauseVisible = false;
     this.optionsVisible = false;
-    this.setSpeed(this.previousSpeed || this.game.previousSpeed || 1);
+    this.setSpeed(this.previousSpeed || this.game.previousSpeed || DEFAULT_SPEED);
     this.refresh();
     return true;
   }
 
   handleEscape() {
+    if (this.opening) return this.opening.skip();
     if (this.optionsVisible) {
       this.closeOptions();
       return true;
@@ -424,10 +445,61 @@ export class M6Shell {
         this.optionsSignature = signature;
       }
     }
-    if (this.titleRoot) this.titleRoot.hidden = !this.titleVisible || this.optionsVisible;
+    if (this.titleRoot) this.titleRoot.hidden = !this.titleVisible || this.optionsVisible || Boolean(this.opening);
     if (this.pauseRoot) this.pauseRoot.hidden = !this.pauseVisible || this.optionsVisible;
     if (this.optionsRoot) this.optionsRoot.hidden = !this.optionsVisible;
+    if (this.openingRoot) this.openingRoot.hidden = !this.opening;
     if (this.root) this.root.hidden = !this.titleVisible && !this.pauseVisible && !this.optionsVisible;
+  }
+
+  beginOpening() {
+    if (this.opening) return false;
+    const seed = this.readSeed();
+    // Generate names from the real initial state, without advancing or replacing
+    // the current game. The chosen mode only takes effect when play begins.
+    const preview = new Sim(seed, { seededIdentities: true });
+    this.titleVisible = true;
+    this.pauseVisible = false;
+    this.optionsVisible = false;
+    this.creditsOpen = false;
+    this.storyteller = 'chroniqueur';
+    this.setSpeed(0);
+    this.game.input?.cancel?.();
+    const gameRoot = globalThis.document?.querySelector?.('#game-shell');
+    this.openingGameRoot = gameRoot;
+    this.openingPreviousInert = gameRoot?.inert;
+    if (gameRoot) gameRoot.inert = true;
+    // Unhide before constructing: focus() cannot focus a hidden dialog.
+    if (this.openingRoot) this.openingRoot.hidden = false;
+    if (this.titleRoot) this.titleRoot.hidden = true;
+    this.opening = new OpeningSequence({
+      root: this.openingRoot,
+      people: preview.colonists,
+      reduceMotion: this.game.options.reduceMotion,
+      onSound: id => this.game.audio?.playOpeningSound?.(id),
+      onFinish: storyteller => {
+        this.storyteller = storyteller;
+        this.game.startNewGame({ seed, storyteller, leftOutside: true, seededIdentities: true, veillee: true });
+        this.hideTitle();
+        // A notebook closed in a previous game must be open for this new start.
+        if (this.game.ui?.m6Panels) {
+          this.game.ui.m6Panels.notebookHidden = false;
+          this.game.ui.m6Panels.notebookPage = 'outside';
+        }
+        this.game.ui?.refresh?.();
+        this.game.canvas?.focus?.();
+      },
+    });
+    this.refresh();
+    return true;
+  }
+
+  closeOpening() {
+    this.opening?.dispose();
+    this.opening = null;
+    if (this.openingGameRoot) this.openingGameRoot.inert = this.openingPreviousInert;
+    this.openingGameRoot = null;
+    if (this.openingRoot) { this.openingRoot.hidden = true; this.openingRoot.innerHTML = ''; }
   }
 
   readSeed() {
@@ -464,15 +536,14 @@ export class M6Shell {
     this.game.options = saveM6Options({ ...this.game.options, [key]: value }, this.storage);
     this.applyOptions();
     this.refresh();
+    // Le menu est redessiné : rendre la main au choix des couleurs pour comparer au clavier.
+    if (key === 'theme') this.optionsRoot?.querySelector?.('[data-m6-option="theme"]')?.focus?.();
     return true;
   }
 
   handleAction(action) {
     if (action === 'newGame') {
-      const seed = this.readSeed();
-      this.game.startNewGame({ seed, storyteller: this.storyteller });
-      this.hideTitle();
-      return true;
+      return this.beginOpening();
     }
     if (action === 'randomSeed') {
       this.seed = randomSeed();
@@ -483,7 +554,7 @@ export class M6Shell {
       const loaded = this.game.loadLocal();
       if (loaded !== false) {
         this.hideTitle();
-        this.setSpeed(this.previousSpeed || 1);
+        this.setSpeed(this.previousSpeed || DEFAULT_SPEED);
       }
       return loaded !== false;
     }
@@ -518,15 +589,6 @@ export class M6Shell {
   }
 
   onClick(event) {
-    const choice = event.target.closest?.('[data-storyteller-choice]');
-    if (choice && this.root?.contains(choice)) {
-      const id = choice.dataset.storytellerChoice;
-      if (STORYTELLERS.includes(id)) {
-        this.storyteller = id;
-        this.refresh();
-      }
-      return;
-    }
     const button = event.target.closest?.('[data-m6-action]');
     if (button && this.root?.contains(button)) this.handleAction(button.dataset.m6Action, button);
   }

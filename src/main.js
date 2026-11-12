@@ -1,10 +1,12 @@
 import { Game } from './game.js';
-import { applyGameLanguage, loadLanguage, M6Shell } from './ui/m6Shell.js';
+import { applyGameLanguage, applyTheme, loadLanguage, loadM6Options, M6Shell } from './ui/m6Shell.js';
+import { DEFAULT_SPEED, speedFromRequest } from './data/speeds.js';
 
 applyGameLanguage(loadLanguage());
+applyTheme(loadM6Options().theme);
 const params = new URLSearchParams(location.search);
 const seed = Number.parseInt(params.get('seed') ?? '1', 10) || 1;
-const speed = Number.parseInt(params.get('speed') ?? '1', 10);
+const speed = speedFromRequest(Number.parseInt(params.get('speed') ?? String(DEFAULT_SPEED), 10));
 const game = new Game({
   canvas: document.querySelector('#game-canvas'),
   seed,

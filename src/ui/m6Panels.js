@@ -1,15 +1,20 @@
-import { tr } from '../data/strings.fr.js';
+import { getLanguage, tr } from '../data/strings.fr.js';
 import { SOUVENIR_DEFINITIONS } from '../data/souvenirs.js';
 import { notebookModel } from '../sim/objectives.js';
 import { waterChainModel } from '../sim/waterChain.js';
 import { calendarDate, excavationDisplayName, RESERVE_HORIZON_DAYS } from './models.js';
 import { formatNumber } from './tooltips.js';
+import { outsideNotebookPanel, outsideNotebookSignature, refreshOutsideNotebook } from './leftOutside.js';
+import { veilleeNotebookPanel, veilleeReminderMarkup } from './veillee.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[character]));
 
-export function notebookPanel(model) {
+const initialNotebookPage = (sim) => sim.leftOutside?.items.some((item) => ['available', 'outbound', 'secured'].includes(item.status))
+  ? 'outside' : 'objectives';
+
+export function notebookPanel(model, hasOutside = false, veilleeReminder = '') {
   const entries = model.entries.map((entry) => `<li class="${entry.completed ? 'completed' : ''}" data-objective-id="${escapeHtml(entry.id)}">
     <span class="m6-objective-check" aria-hidden="true">${entry.completed ? '✓' : '○'}</span>
     <div><strong>${escapeHtml(tr(entry.textKey))}</strong>
@@ -20,6 +25,8 @@ export function notebookPanel(model) {
     <div class="m6-panel-heading"><div><span class="eyebrow">${escapeHtml(tr('m6NotebookElder'))}</span><h2>${escapeHtml(tr('m6Notebook'))}</h2></div>
     <button type="button" class="icon-button" data-m6-action="toggleNotebook" aria-label="${escapeHtml(tr('m6HideNotebook'))}">×</button></div>
     <p class="m6-elder-voice">${escapeHtml(tr('m6NotebookIntro'))}</p>
+    ${veilleeReminder}
+    ${hasOutside ? `<button type="button" class="wide" data-m6-action="outsidePage">${escapeHtml(tr('outsideTitle'))}</button>` : ''}
     <ol class="m6-objective-list">${entries}</ol>
     ${model.suggestion ? `<p class="m6-notebook-suggestion" data-m6-suggestion="${escapeHtml(model.suggestion.objectiveId)}"><strong>${escapeHtml(tr('m6NotebookIdea'))}</strong> ${escapeHtml(tr(model.suggestion.textKey))}</p>` : ''}
     <button type="button" class="wide" data-m6-action="souvenirs">${escapeHtml(tr('m6Souvenirs'))}</button>
@@ -174,17 +181,33 @@ export class M6Panels {
     this.ui = ui;
     this.sim = game.sim;
     this.notebookHidden = false;
+    this.notebookPage = initialNotebookPage(game.sim);
     this.modal = null;
     this.waterOpen = false;
     this.signature = '';
+    this.outsideSignature = '';
+    this.outsideHtml = '';
     // Headless games (tests, tools) have no DOM to draw the notebook into.
     this.root = typeof document !== 'undefined' && typeof document.createElement === 'function' ? document.createElement('div') : null;
     if (!this.root) return;
     this.root.id = 'm6-panels';
+    // One slot per panel: a panel whose content has not changed keeps its
+    // nodes. The water panel's figures change all the time; rewriting the
+    // notebook with them dropped its drawings for a frame (it blinked).
+    this.slots = {};
+    this.slotHtml = {};
+    for (const name of ['notebook', 'souvenirs', 'water']) {
+      const slot = document.createElement('div');
+      slot.dataset.m6Slot = name;
+      slot.style.display = 'contents';
+      this.root.append(slot);
+      this.slots[name] = slot;
+      this.slotHtml[name] = '';
+    }
     document.querySelector('#game-shell')?.append(this.root);
     this.root.addEventListener('click', (event) => {
       const button = event.target.closest('[data-m6-action]');
-      if (button) this.handleAction(button.dataset.m6Action);
+      if (button) this.handleAction(button.dataset.m6Action, button);
     });
   }
 
@@ -194,9 +217,37 @@ export class M6Panels {
     return true;
   }
 
-  handleAction(action) {
+  openVeillee() {
+    if (!this.game.sim.veillee || this.game.sim.exodus?.result) return false;
+    this.game.ui?.tokenBoard?.close?.();
+    // A load may replace the Sim before the next UI refresh.
+    if (this.sim !== this.game.sim) this.refresh();
+    this.notebookPage = 'veillee';
+    this.notebookHidden = false;
+    this.refresh(true);
+    this.root?.querySelector?.('[data-veillee-heading]')?.focus?.({ preventScroll: true });
+    return true;
+  }
+
+  handleAction(action, button) {
     if (action === 'toggleNotebook') {
       this.notebookHidden = !this.notebookHidden;
+    } else if (action === 'veilleePage') {
+      return this.openVeillee();
+    } else if (action === 'veilleeChoice') {
+      const result = this.game.apply({ type: 'dilemmaChoice', dilemmaId: Number(button?.dataset?.dilemmaId), choiceIndex: Number(button?.dataset?.choiceIndex) });
+      if (!result.ok) this.ui.toast?.(result.error ?? 'actionFailed');
+    } else if (action === 'veilleeEngrave') {
+      const value = button?.dataset?.choiceIndex;
+      const result = this.game.apply({ type: 'veilleeEngrave', ...(value !== undefined ? { choiceIndex: Number(value) } : {}) });
+      if (!result.ok) this.ui.toast?.(result.error ?? 'actionFailed');
+    } else if (action === 'outsidePage' && this.game.sim.leftOutside) {
+      this.notebookPage = 'outside';
+      this.notebookHidden = false;
+    } else if (action === 'outsideObjectives') {
+      this.notebookPage = 'objectives';
+    } else if (action === 'outsideFetch') {
+      return this.ui.m4Panels?.selectOutside(button?.dataset?.outsideId) ?? false;
     } else if (action === 'souvenirs') {
       this.modal = 'souvenirs';
     } else if (action === 'closeSouvenirs') {
@@ -223,9 +274,12 @@ export class M6Panels {
   refresh(force = false) {
     if (this.sim !== this.game.sim) {
       this.sim = this.game.sim;
+      this.notebookPage = initialNotebookPage(this.sim);
       this.modal = null;
       this.waterOpen = false;
       this.signature = '';
+      this.outsideSignature = '';
+      this.outsideHtml = '';
     }
     if (!this.root) return;
     if (force) this.signature = '';
@@ -233,11 +287,53 @@ export class M6Panels {
     this.root.hidden = hiddenByScreen;
     if (hiddenByScreen) return;
     const notebook = notebookModel(this.sim);
+    const outsideSignature = this.sim.leftOutside && this.notebookPage === 'outside' && !this.notebookHidden
+      ? outsideNotebookSignature(this.sim) : '';
+    if (outsideSignature !== this.outsideSignature) {
+      this.outsideSignature = outsideSignature;
+      this.outsideHtml = outsideSignature ? outsideNotebookPanel(this.sim) : '';
+    }
+    const outside = this.outsideHtml;
+    const veillee = this.notebookPage === 'veillee' && !this.notebookHidden ? veilleeNotebookPanel(this.sim) : '';
+    const reminder = veilleeReminderMarkup(this.sim);
     const water = this.waterOpen ? waterChainModel(this.sim) : null;
-    const signature = JSON.stringify({ notebook, hidden: this.notebookHidden, modal: this.modal, waterOpen: this.waterOpen, water, souvenirs: this.sim.m6?.souvenirs ?? [] });
-    if (!force && signature === this.signature) return;
+    const signature = JSON.stringify({ notebook, outside: outsideSignature, veillee, reminder, language: getLanguage(), notebookPage: this.notebookPage, hidden: this.notebookHidden, modal: this.modal, waterOpen: this.waterOpen, water, souvenirs: this.sim.m6?.souvenirs ?? [] });
+    if (!force && signature === this.signature) {
+      if (outside) refreshOutsideNotebook(this.slots?.notebook ?? this.root, this.sim);
+      return;
+    }
     this.signature = signature;
-    const reopen = `<button type="button" id="m6-notebook-reopen" data-m6-action="toggleNotebook">${tr('m6Notebook')}</button>`;
-    this.root.innerHTML = `${this.notebookHidden ? reopen : notebookPanel(notebook)}${this.modal === 'souvenirs' ? souvenirsPanel(this.sim) : ''}${water ? waterPanel(water, this.sim.excavations) : ''}`;
+    const reopen = `<button type="button" id="m6-notebook-reopen" data-m6-action="${this.sim.veillee?.session ? 'veilleePage' : 'toggleNotebook'}">${tr(this.sim.veillee?.session ? 'veilleeReminder' : 'm6Notebook')}</button>`;
+    const parts = {
+      notebook: this.notebookHidden ? reopen : veillee || (outside ? outside.replace('</section>', `${reminder}</section>`) : notebookPanel(notebook, Boolean(this.sim.leftOutside), reminder)),
+      souvenirs: this.modal === 'souvenirs' ? souvenirsPanel(this.sim) : '',
+      water: water ? waterPanel(water, this.sim.excavations) : '',
+    };
+    if (!this.slots) {
+      this.root.innerHTML = `${parts.notebook}${parts.souvenirs}${parts.water}`;
+      if (outside) refreshOutsideNotebook(this.root, this.sim);
+      return;
+    }
+    for (const [name, html] of Object.entries(parts)) {
+      if (html === this.slotHtml[name]) continue;
+      const slot = this.slots[name];
+      // Rewriting a panel the player has scrolled keeps it where it was.
+      const scrolled = slot.firstElementChild?.scrollTop ?? 0;
+      const focused = globalThis.document?.activeElement;
+      const focusedAction = slot.contains?.(focused) ? focused?.dataset?.m6Action : null;
+      const focusedId = focused?.dataset?.outsideId;
+      const focusedSubjectId = focused?.dataset?.dilemmaId;
+      const focusedChoiceIndex = focused?.dataset?.choiceIndex;
+      slot.innerHTML = html;
+      this.slotHtml[name] = html;
+      if (scrolled && slot.firstElementChild) slot.firstElementChild.scrollTop = scrolled;
+      if (focusedAction) {
+        const selector = `[data-m6-action="${focusedAction}"]${focusedId ? `[data-outside-id="${focusedId}"]` : ''}`
+          + (focusedSubjectId !== undefined ? `[data-dilemma-id="${focusedSubjectId}"]` : '')
+          + (focusedChoiceIndex !== undefined ? `[data-choice-index="${focusedChoiceIndex}"]` : '');
+        slot.querySelector?.(selector)?.focus?.({ preventScroll: true });
+      }
+    }
+    if (outside) refreshOutsideNotebook(this.slots.notebook, this.sim);
   }
 }

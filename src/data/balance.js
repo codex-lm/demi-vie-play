@@ -14,8 +14,12 @@ export const TIME = Object.freeze({
   TICKS_PER_DAY: 1440,
   TICKS_PER_HOUR: 60,
   START_HOUR: 6,
-  TICKS_PER_SECOND_AT_X1: 24,
-  SPEEDS: [0, 1, 3, 10, 30],
+  // Real-time pace only: the simulation never reads the tick rate. At speed 1
+  // ("Vivre") a day of 1 440 ticks lasts ten real minutes; the faster speeds
+  // are multiples of it (10 = one day per minute, the former x1). Names, day
+  // lengths and the rules attached to a speed live in data/speeds.js.
+  TICKS_PER_SECOND_AT_X1: 2.4,
+  SPEEDS: [0, 1, 10, 30, 100, 300],
   MAX_TICKS_PER_FRAME: 400,
   DAYS_PER_SEASON: 90,
   DAYS_PER_YEAR: 360,

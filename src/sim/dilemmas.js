@@ -12,6 +12,7 @@ import { selectRescueCrew, startRescue } from './rescue.js';
 import { addToStock, createStock, hasResources, recordReserveShift, reserveStock, spendableAmount, spendResources } from './resources.js';
 import { hashString, RNG } from './rng.js';
 import { surfaceHatch } from './surface.js';
+import { hasQueuedStorytellerDilemma, queuedVeilleeDilemma, resolveVeilleeDilemma, routeVeilleeDilemma, veilleeDilemmaOriginTick } from './veillee.js';
 
 const clamp = (value, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 const living = (sim) => (sim.colonists ?? []).filter((colonist) => colonist.health > 0 && !colonist.dead)
@@ -152,7 +153,7 @@ export function offerDilemma(sim, definition, options = {}) {
       };
     }),
   };
-  sim.m5.dilemmas.pending = pending;
+  sim.m5.dilemmas.pending = routeVeilleeDilemma(sim, pending, resolved, options) ? null : pending;
   sim.m5.dilemmas.lastDefinitionId = resolved.id;
   sim.log('info', 'eventDilemmaOffered', {
     dilemmaId: pending.id,
@@ -191,7 +192,8 @@ function missingResources(sim, cost) {
 
 export function chooseDilemma(sim, order) {
   initializeDilemmas(sim);
-  const pending = sim.m5.dilemmas.pending;
+  const queued = queuedVeilleeDilemma(sim, order.dilemmaId);
+  const pending = queued?.pending ?? sim.m5.dilemmas.pending;
   const definition = pending ? definitionForPending(pending) : null;
   if (!pending || !definition || pending.id !== order.dilemmaId || !Number.isInteger(order.choiceIndex)
     || order.choiceIndex < 0 || order.choiceIndex >= definition.choices.length) {
@@ -209,7 +211,10 @@ export function chooseDilemma(sim, order) {
     return { ok: false, error: 'expeditionUnavailable' };
   }
   const delayDays = choice.delayDays ?? DILEMMA_RULES.RADIO_DELAY_DAYS;
-  const dueTick = sim.tick + delayDays * TIME.TICKS_PER_DAY;
+  // A safely deferred subject keeps the consequence dates it announced when
+  // offered. Once its deadline has passed it is urgent and uses normal rules.
+  const originTick = veilleeDilemmaOriginTick(sim, pending);
+  const dueTick = originTick + delayDays * TIME.TICKS_PER_DAY;
   pending.choiceIndex = order.choiceIndex;
   pending.chosenTick = sim.tick;
   pending.consequenceTick = dueTick;
@@ -230,7 +235,8 @@ export function chooseDilemma(sim, order) {
     rescueColonistIds,
   });
   sim.m5.dilemmas.history.push(pending);
-  sim.m5.dilemmas.pending = null;
+  if (sim.m5.dilemmas.pending === pending) sim.m5.dilemmas.pending = null;
+  resolveVeilleeDilemma(sim, pending);
   const choiceText = dilemmaText(definition, 'choice', order.choiceIndex, pending.target);
   sim.log(effects.killTarget || effects.targetDisease || choice.risk === 'deathsAnnounced' ? 'warning' : 'info', 'eventDilemmaChosen', {
     dilemmaId: pending.id,
@@ -484,7 +490,7 @@ export function updateDilemmas(sim) {
   const dueIds = new Set(due.map((consequence) => consequence.dilemmaId));
   state.scheduled = state.scheduled.filter((consequence) => !dueIds.has(consequence.dilemmaId));
   for (const consequence of due) explainConsequence(sim, consequence);
-  if (state.pending || sim.tick < state.nextDilemmaTick) return state.pending;
+  if (state.pending || hasQueuedStorytellerDilemma(sim) || sim.tick < state.nextDilemmaTick) return state.pending;
   const mode = sim.m5.storyteller?.mode ?? 'chroniqueur';
   let candidates = DILEMMAS.filter((definition) => canAutomaticallyOffer(sim, definition, mode));
   const alternatives = candidates.filter((definition) => definition.id !== state.lastDefinitionId);

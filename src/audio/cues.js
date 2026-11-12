@@ -1,6 +1,7 @@
 // Presentation-only audio policy. No simulation state or RNG is consumed.
 import { CELL, TIME, WORLD } from '../data/balance.js';
 import { MATERIAL, MATERIALS } from '../data/materials.js';
+import { SPEED } from '../data/speeds.js';
 
 export const clamp = (n, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
 export const SOUND_TYPES = Object.freeze({
@@ -165,7 +166,7 @@ export class CueReader {
     this.lastTick = sim.tick;
     const result = [];
     for (const cue of [...groups.values()].sort((a, b) => PRIORITY[b.type] - PRIORITY[a.type])) {
-      const interval = cue.type === 'pick' ? (game.speed >= 10 ? 0.45 : 0.19) : cue.type === 'radio' ? 1.1 : 0.55;
+      const interval = cue.type === 'pick' ? (game.speed >= SPEED.HURRY ? 0.45 : 0.19) : cue.type === 'radio' ? 1.1 : 0.55;
       if (now < (this.cooldowns.get(cue.type) ?? -Infinity)) continue;
       this.cooldowns.set(cue.type, now + interval);
       cue.gain *= Math.min(1.2, 1 + Math.log2(cue.count) * 0.035);

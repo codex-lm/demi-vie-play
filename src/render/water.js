@@ -1,5 +1,6 @@
 import { WATER, WORLD } from '../data/balance.js';
 import { MATERIAL } from '../data/materials.js';
+import { ticksPerSecond } from '../data/speeds.js';
 import { drawWaterBody, drawWaterTable, drawDrip, drawSeep } from '../../art/water.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -13,6 +14,69 @@ export function waterLevelAt(world, x, y) {
   const cellY = Math.round(y);
   if (!world?.water || !world.inBounds(cellX, cellY) || !world.isEmpty(cellX, cellY)) return 0;
   return fractionalWaterLevel(world.water[world.index(cellX, cellY)]);
+}
+
+// The simulation moves water once every WATER.UPDATE_INTERVAL ticks, by up to
+// half a cell at a time. At "Vivre" that is one jump every four real seconds.
+// Pools are therefore drawn from amounts that follow the simulation on real
+// time: a fraction of a second at "Vivre", next to nothing at the faster
+// speeds, where the jumps come as fast as they did at the former x1.
+const SHOWN_EASE_SECONDS = 0.3; // longest time constant of the easing
+const SHOWN_EASE_SHARE = 0.07; // ... and its share of the real time between two water updates
+const SHOWN_SNAP = 1; // water units (1 % of a cell) from which the amount is the simulation's
+const SHOWN_MAX_GAP_SECONDS = 0.5; // a longer gap between two frames is not motion
+const shownWater = new WeakMap();
+
+/** Water amounts to draw for the pools: `world.water`, eased on real time.
+ * The first frame of a world, a clock that does not advance (reduced motion,
+ * a still image) and a long gap all give the simulation's amounts as they are. */
+export function shownWaterAmounts(world, now, speed) {
+  const target = world.water;
+  let state = shownWater.get(world);
+  if (!state || state.amounts.length !== target.length) {
+    state = { amounts: Float32Array.from(target), now };
+    shownWater.set(world, state);
+    return state.amounts;
+  }
+  const shown = state.amounts;
+  const elapsed = now - state.now;
+  state.now = now;
+  const rate = ticksPerSecond(speed);
+  const period = rate > 0 ? WATER.UPDATE_INTERVAL / rate : Infinity;
+  const ease = Math.min(SHOWN_EASE_SECONDS, period * SHOWN_EASE_SHARE);
+  // No easing shorter than a frame: from "Veiller" up, the simulation's water.
+  if (!(elapsed > 0) || elapsed > SHOWN_MAX_GAP_SECONDS || ease <= elapsed) {
+    shown.set(target);
+    return shown;
+  }
+  const gain = 1 - Math.exp(-elapsed / ease);
+  const width = world.width;
+  const full = WATER.MAX_PER_CELL;
+  for (let index = 0; index < target.length; index += 1) {
+    const goal = target[index];
+    const current = shown[index];
+    if (current === goal) continue;
+    const x = index % width;
+    const y = (index - x) / width;
+    // Groundwater held in rock is not a pool: it is drawn as the simulation has it.
+    if (!world.isEmpty(x, y)) {
+      shown[index] = goal;
+      continue;
+    }
+    if (goal > current) {
+      // A cell starts to fill once the full cell under it is shown full, so
+      // that no slab of water ever hangs over a surface still rising.
+      const below = index + width;
+      if (below < target.length && target[below] >= full && shown[below] < full && world.isEmpty(x, y + 1)) continue;
+    } else if (current >= full) {
+      // And a full cell starts to empty once the dry cell over it is shown dry.
+      const above = index - width;
+      if (above >= 0 && target[above] <= 0 && shown[above] > 0 && world.isEmpty(x, y - 1)) continue;
+    }
+    const next = current + (goal - current) * gain;
+    shown[index] = Math.abs(goal - next) < SHOWN_SNAP ? goal : next;
+  }
+  return shown;
 }
 
 function surfaceY(row, level, x, now) {
@@ -42,20 +106,20 @@ function traceSurface(ctx, view, cell, now) {
   }
 }
 
-function collectBodies(world, minX, maxX, minY, maxY, flowingTargets) {
+function collectBodies(world, water, minX, maxX, minY, maxY, flowingTargets) {
   const bodies = [];
   const visited = new Set();
   const wet = (x, y) => {
     if (x < minX || x > maxX || y < minY || y > maxY || !world.isEmpty(x, y) || !world.isVisible(x, y)) return false;
-    const amount = world.water[world.index(x, y)];
+    const amount = water[world.index(x, y)];
     if (amount <= 0) return false;
     // Sparse water falling through an unfilled cell is a wall film / droplet,
     // not a full metre of pool. Its inlet is painted by drawEntrances below.
     if (!flowingTargets.has(world.index(x, y)) || amount >= WATER.MAX_PER_CELL || !world.isEmpty(x, y + 1)) return true;
     // A lone thin wall film above a full pool is still an inflow, not a raised
     // stair at its edge. A shallow row spread horizontally remains a pool.
-    const horizontal = [x - 1, x + 1].some(xx => world.isEmpty(xx, y) && world.water[world.index(xx, y)] > 0);
-    return world.water[world.index(x, y + 1)] >= WATER.MAX_PER_CELL && (amount > WATER.MAX_PER_CELL * .25 || horizontal);
+    const horizontal = [x - 1, x + 1].some(xx => world.isEmpty(xx, y) && water[world.index(xx, y)] > 0);
+    return water[world.index(x, y + 1)] >= WATER.MAX_PER_CELL && (amount > WATER.MAX_PER_CELL * .25 || horizontal);
   };
   for (let y = minY; y <= maxY; y += 1) {
     for (let x = minX; x <= maxX; x += 1) {
@@ -68,7 +132,7 @@ function collectBodies(world, minX, maxX, minY, maxY, flowingTargets) {
       for (let cursor = 0; cursor < queue.length; cursor += 1) {
         const cell = queue[cursor];
         const index = world.index(cell.x, cell.y);
-        cells.push({ ...cell, index, amount: world.water[index] });
+        cells.push({ ...cell, index, amount: water[index] });
         indices.add(index);
         for (const [xx, yy] of [[cell.x - 1, cell.y], [cell.x + 1, cell.y], [cell.x, cell.y - 1], [cell.x, cell.y + 1]]) {
           if (xx < minX || xx > maxX || yy < minY || yy > maxY) continue;
@@ -333,7 +397,7 @@ export function waterEntrances(world, room) {
   return result;
 }
 
-function drawEntrances(ctx, game, view) {
+function drawEntrances(ctx, game, view, water) {
   const world = game.sim.world, cell = view.cellSize;
   for (const room of game.sim.excavations ?? []) {
     if (view.sx(room.x + room.w) < 0 || view.sx(room.x) > view.width
@@ -353,7 +417,7 @@ function drawEntrances(ctx, game, view) {
       let end = room.y + room.h - .1;
       for (let yy = Math.floor(y); yy < room.y + room.h; yy++) {
         const index = world.index(Math.floor(x), yy);
-        if (world.water[index] > 0) { end = Math.max(y + .08, yy + 1 - fractionalWaterLevel(world.water[index])); break; }
+        if (water[index] > 0) { end = Math.max(y + .08, yy + 1 - fractionalWaterLevel(water[index])); break; }
       }
       const region = { x: view.sx(x - .13), y: view.sy(y), w: cell * .26, h: Math.max(cell * .1, (end - y) * cell) };
       drawSeep(ctx, { ...region, h: Math.min(cell * 1.2, region.h) }, cell, { t: view.now, seed: source.source });
@@ -398,7 +462,9 @@ export function drawWater(ctx, game, view) {
   ctx.save();
   drawAquifers(ctx, world, waterView, minX, maxX, minY, maxY);
   const flowingTargets = new Set((game.sim.excavations ?? []).flatMap(room => waterEntrances(world, room).map(entry => entry.target)));
-  for (const body of collectBodies(world, minX, maxX, minY, maxY, flowingTargets)) drawBody(ctx, waterView, world, body, game.sim.excavations ?? []);
-  drawEntrances(ctx, game, waterView);
+  // Pools follow the simulation on real time (see shownWaterAmounts).
+  const water = shownWaterAmounts(world, waterView.now, game.speed);
+  for (const body of collectBodies(world, water, minX, maxX, minY, maxY, flowingTargets)) drawBody(ctx, waterView, world, body, game.sim.excavations ?? []);
+  drawEntrances(ctx, game, waterView, water);
   ctx.restore();
 }

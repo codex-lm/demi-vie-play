@@ -47,6 +47,12 @@ function makeCanvas(w,h){
 export function clearSurfaceCache(){cache.clear();cachedPixels=0;cacheHits=0;cacheMisses=0;}
 export function surfaceCacheInfo(){return {entries:cache.size,pixels:cachedPixels,hits:cacheHits,misses:cacheMisses,maxEntries:MAX_ENTRIES,maxPixels:MAX_PIXELS};}
 function cachedScene(w,h,cell,horizon,years,season,seed,skyColors,snow=null){
+  // Keep a wide monitor's fully zoomed panorama resident, including the
+  // rounding to whole canvas pixels. Weather and hotspots stay full resolution.
+  if(Math.ceil(w)*Math.ceil(h)>MAX_PIXELS){
+    const scale=Math.sqrt(MAX_PIXELS/(w*h));
+    w=Math.max(1,Math.floor(w*scale));h=Math.max(1,Math.floor(h*scale));cell*=scale;horizon*=scale;
+  }
   // Thermal snow is quantised to twentieths by the caller, so a slowly drifting
   // thermometer reuses one landscape instead of rebuilding one every tick.
   const key=[w,h,cell,horizon,years,season,seed,JSON.stringify(skyColors),snow===null?'season':snow].join(':');
@@ -345,7 +351,8 @@ export function drawSurface(c,rect,cellPx,opts={}){
   const snowfall=temperature===null?null:clamp(-temperature/10);
   c.save();c.beginPath();c.rect(x,y,w,h);c.clip();c.translate(x,y);
   const skyColors=opts.skyColors;
-  const scene=cachedScene(w,h,cell,horizon,years,season,seed,skyColors,snow);
+  const raster=opts.landscape;
+  const scene=cachedScene(raster?.width??w,raster?.height??h,raster?.cell??cell,raster?.horizon??horizon,years,season,seed,skyColors,snow);
   if(scene)c.drawImage(scene,0,0,w,h);else paintLandscape(c,w,h,cell,horizon,years,season,seed,skyColors,snow);
   weather(c,w,h,cell,horizon,years,kind,t,seed);
   seasonalMotion(c,w,horizon,cell,years,season,t,seed,snowfall);

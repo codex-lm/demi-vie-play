@@ -2,6 +2,7 @@
   "title": "Demi-Vie",
   "description": "Seal the hatch on twelve survivors after a nuclear catastrophe. Carve rooms into the rock and reinforce them before they collapse. Keep the shelter supplied with air, water, food, and heat. Fetch what was left outside while the radiation halves, and prepare the Exodus.",
   "entrypoint": "index.html",
+  "icon": "assets/store/icon.png",
   "license": "MIT",
   "genre": [
     "City builder",

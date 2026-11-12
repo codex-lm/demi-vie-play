@@ -138,8 +138,8 @@ function circle(ctx, x, y, radius, color) {
   ctx.fill();
 }
 
-export function colonistWorkPose(sim, colonist) {
-  if (colonist.suit) return 'suit';
+export function colonistWorkPose(sim, colonist, suited = colonist.suit) {
+  if (suited) return 'suit';
   const task = colonist.task;
   if (task === 'caring') return 'medic';
   if (task !== 'working' && task !== 'repairing' && task !== 'clearing') return task;
@@ -244,7 +244,7 @@ const POSES = {
 export function colonistArtOptions(sim, colonist, time = 0, alpha = 1, motion = null) {
   const appearance = colonistAppearance(sim, colonist);
   // A suit is clothing: it must not erase a ladder climb or force a resting person to walk.
-  const workPose = colonistWorkPose(sim, { ...colonist, suit: false });
+  const workPose = colonistWorkPose(sim, colonist, false);
   const pose = colonist.health <= 0 ? 'sleep' : POSES[workPose] ?? 'idle';
   return {
     ...appearance, pose, suit: Boolean(colonist.suit),
@@ -322,35 +322,39 @@ function machinePlacement(sim, colonist, options, time) {
   return null;
 }
 
-function sleepingRoom(sim, colonist) {
-  const rooms = sim.excavations?.filter((room) => (room.roomType === 'dorm' || room.label === 'shelterDorm')
-    && (room.state === 'fitted' || room.initial)) ?? [];
+function sleepingRoom(rooms, colonist) {
   const inside = (room, x, y) => x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h;
   return rooms.find((room) => room.id === colonist.personal?.excavationId)
     ?? rooms.find((room) => inside(room, colonist.x, colonist.y))
     ?? rooms.find((room) => inside(room, colonist.bedX, colonist.bedY));
 }
 
-function sleepingPlacement(sim, colonist, options, bodyScale, artScale) {
-  if (colonist.task !== 'sleeping') return null;
-  const room = sleepingRoom(sim, colonist);
-  if (!room) return null;
-  const beds = dormLayout(room.w, room.h, room.beds ?? (room.label === 'shelterDorm' ? 12 : 0)).beds;
-  // Keep serialized preferences, resolving collisions between current sleepers deterministically.
-  const sleepers = sim.colonists.filter((person) => person.task === 'sleeping' && sleepingRoom(sim, person)?.id === room.id)
-    .slice().sort((a, b) => (a.bedIndex ?? a.id) - (b.bedIndex ?? b.id) || a.id - b.id);
-  const used = new Set();
-  let slot = 0;
+function assignBeds(sim) {
+  const assignments = new Map();
+  const sleepers = sim.colonists.filter(person => person.task === 'sleeping');
+  if (!sleepers.length) return assignments;
+  const rooms = sim.excavations?.filter(room => (room.roomType === 'dorm' || room.label === 'shelterDorm')
+    && (room.state === 'fitted' || room.initial)) ?? [];
+  const dorms = new Map();
+  // A single priority order preserves each dorm's tie-breaks for colliding preferences.
+  sleepers.sort((a, b) => (a.bedIndex ?? a.id) - (b.bedIndex ?? b.id) || a.id - b.id);
   for (const sleeper of sleepers) {
-    slot = Math.abs(Math.trunc(sleeper.bedIndex ?? sleeper.id ?? 0)) % beds.length;
-    for (let offset = 0; used.has(slot) && offset < beds.length; offset += 1) slot = (slot + 1) % beds.length;
-    used.add(slot);
-    if (sleeper.id === colonist.id) break;
+    const room = sleepingRoom(rooms, sleeper);
+    if (!room) continue;
+    if (!dorms.has(room)) {
+      const beds = dormLayout(room.w, room.h, room.beds ?? (room.label === 'shelterDorm' ? 12 : 0)).beds;
+      dorms.set(room, { beds, used: new Set() });
+    }
+    const { beds, used } = dorms.get(room);
+    let slot = Math.abs(Math.trunc(sleeper.bedIndex ?? sleeper.id ?? 0)) % beds.length;
+    if (!Number.isFinite(slot)) slot = 0;
+    if (used.size < beds.length) {
+      while (used.has(slot)) slot = (slot + 1) % beds.length;
+      used.add(slot);
+    }
+    assignments.set(sleeper.id, { room, bed: beds[slot] });
   }
-  const bed = beds[slot];
-  options.facing = 1;
-  const scale = Math.min(bodyScale, bed.scale);
-  return { x: room.x + bed.x, y: room.y + bed.y, bodyScale: scale, cellScale: scale / artScale, artScale, machine: false, options };
+  return assignments;
 }
 
 /** The child is already painted in these arms. A stale/orphaned link hides nobody. */
@@ -362,7 +366,7 @@ export function carryingParent(sim, child) {
 }
 
 /** Visual feet in world metres, shared by silhouettes and selection arrows. */
-export function colonistVisualPosition(sim, colonist, alpha = 0, time = 0, occupants = null, motion = null) {
+export function colonistVisualPosition(sim, colonist, alpha = 0, time = 0, occupants = null, motion = null, beds = null) {
   const activity = colonistM6Action(sim, colonist);
   const step = interpolatedColonistPosition(colonist, alpha, sim);
   let { x: worldX, y: worldY } = step;
@@ -385,7 +389,7 @@ export function colonistVisualPosition(sim, colonist, alpha = 0, time = 0, occup
     worldX = colonist.bedX; worldY = colonist.bedY;
   } else if (activity?.action !== 'climbingOut' && activity?.action !== 'listeningRock') {
     const key = `${Math.round(colonist.x)}:${Math.round(colonist.y)}`;
-    const group = occupants?.get(key) ?? sim.colonists.filter((person) => person.health > 0 && person.task !== 'sleeping' && !carryingParent(sim, person)
+    const group = occupants ? (occupants.get(key) ?? []) : sim.colonists.filter((person) => person.health > 0 && person.task !== 'sleeping' && !carryingParent(sim, person)
       && Math.round(person.x) === Math.round(colonist.x) && Math.round(person.y) === Math.round(colonist.y)).map((person) => person.id);
     const slot = group.indexOf(colonist.id);
     // A sleeper still walking to bed is not counted among the people standing there.
@@ -434,8 +438,15 @@ export function colonistVisualPosition(sim, colonist, alpha = 0, time = 0, occup
     return { x: (shaft ? shaft.x + shaft.w / 2 : worldX + .5) - .5 * bodyScale, y: worldY + 1,
       bodyScale, cellScale: bodyScale / artScale, artScale, machine: false, options };
   }
-  const sleeping = onTheWay ? null : sleepingPlacement(sim, colonist, options, bodyScale, artScale);
-  if (sleeping) return sleeping;
+  if (!onTheWay && colonist.task === 'sleeping') {
+    const assignment = (beds ?? assignBeds(sim)).get(colonist.id);
+    if (assignment) {
+      const { room, bed } = assignment;
+      options.facing = 1;
+      const scale = Math.min(bodyScale, bed.scale);
+      return { x: room.x + bed.x, y: room.y + bed.y, bodyScale: scale, cellScale: scale / artScale, artScale, machine: false, options };
+    }
+  }
   const machine = machinePlacement(sim, colonist, options, time);
   if (machine) Object.assign(options, { t: machine.t, facing: machine.facing, handTarget: machine.handTarget });
   return { x: machine?.x ?? worldX + .5, y: machine?.y ?? worldY + 1,
@@ -496,6 +507,7 @@ export function drawColonists(ctx, game, view) {
   const time = game.options?.reduceMotion ? 0 : game.renderTime ?? view.now ?? 0;
   const motion = colonistMotion(game.speed || game.previousSpeed);
   const occupants = new Map();
+  const beds = assignBeds(game.sim);
   for (const colonist of game.sim.colonists) {
     if (colonist.health <= 0 || colonist.task === 'sleeping' || carryingParent(game.sim, colonist)) continue;
     const key = `${Math.round(colonist.x)}:${Math.round(colonist.y)}`;
@@ -504,7 +516,7 @@ export function drawColonists(ctx, game, view) {
   }
   for (const colonist of game.sim.colonists) {
     if ((colonist.health <= 0 && colonist.bodyLocation === 'ossuary') || carryingParent(game.sim, colonist)) continue;
-    const placement = colonistVisualPosition(game.sim, colonist, alpha, time, occupants, motion);
+    const placement = colonistVisualPosition(game.sim, colonist, alpha, time, occupants, motion, beds);
     if (!game.sim.world.isVisible(Math.round(placement.x - .5), Math.round(placement.y - 1))) continue;
     const { options, bodyScale, artScale, machine } = placement;
     if (game.options?.reduceMotion) options.t = 0;

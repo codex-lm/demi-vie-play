@@ -339,7 +339,7 @@ function drawInterior(ctx, game, view, excavation, box) {
     const options = artOptions(excavation, game.sim, time, power);
     if (!drawM6Room(ctx, artType, box, excavation, game.sim)) {
       drawRoomProps(ctx, artType, { x: box.left, y: box.top, w: box.width, h: box.height }, box.cell,
-        { ...options, backWall: !flooded });
+        { ...options, backWall: !flooded, rasterCell: view.rasterCell, widthCells: excavation.w, heightCells: excavation.h });
     }
     drawPowerStatus(ctx, box, excavation, time, options.reserveArt, power);
   } else {
@@ -621,7 +621,9 @@ function drawStructure(ctx, game, view, excavation, box) {
   const m = ctx.getTransform(), sx = Math.hypot(m.a, m.b), sy = Math.hypot(m.c, m.d);
   // A cell of padding retains the bolts driven beyond the rock ceiling.
   const margin = box.cell, width = box.width + margin * 2, height = box.height + margin * 2;
-  const pw = Math.ceil(width * sx), ph = Math.ceil(height * sy), bytes = pw * ph * 4;
+  const rasterCell = view.rasterCell ?? box.cell;
+  const rasterWidth = (excavation.w + 2) * rasterCell, rasterHeight = (excavation.h + 2) * rasterCell;
+  const pw = Math.ceil(rasterWidth * sx), ph = Math.ceil(rasterHeight * sy), bytes = pw * ph * 4;
   if (!Number.isFinite(bytes) || pw <= 0 || ph <= 0 || pw > 4096 || ph > 4096 || bytes > STRUCTURE_BYTES) { direct(); return; }
   let dugBottom = excavation.y;
   if (excavation.state === 'digging' && excavation.kind === 'shaft') {
@@ -629,7 +631,7 @@ function drawStructure(ctx, game, view, excavation, box) {
   }
   const key = JSON.stringify([excavation.id, excavation.x, excavation.y, excavation.w, excavation.h,
     excavation.shape, excavation.state, excavation.kind, excavation.initial, roomTypeFor(excavation),
-    excavation.lining, excavation.coating, excavation.supports, roomFloodArt(excavation), damp, dugBottom, box.cell, pw, ph, ctx.lineCap, ctx.lineJoin]);
+    excavation.lining, excavation.coating, excavation.supports, roomFloodArt(excavation), damp, dugBottom, rasterCell, pw, ph, ctx.lineCap, ctx.lineJoin]);
   let entry = structureCache.get(key);
   if (entry) {
     structureCache.delete(key); structureCache.set(key, entry); structureStats.hits += 1;
@@ -645,11 +647,11 @@ function drawStructure(ctx, game, view, excavation, box) {
       structureCache.delete(oldest); structureStats.bytes -= previous.bytes; structureStats.evictions += 1;
       previous.canvas.width = 0; previous.canvas.height = 0;
     }
-    target.scale(pw / width, ph / height);
+    target.scale(pw / rasterWidth, ph / rasterHeight);
     target.lineCap = ctx.lineCap; target.lineJoin = ctx.lineJoin;
-    const localBox = { left: margin, top: margin, right: margin + box.width, bottom: margin + box.height,
-      width: box.width, height: box.height, cell: box.cell };
-    const localView = { ...view, sx: x => margin + (x - excavation.x) * box.cell, sy: y => margin + (y - excavation.y) * box.cell };
+    const localView = { ...view, cellSize: rasterCell, sx: x => rasterCell + (x - excavation.x) * rasterCell,
+      sy: y => rasterCell + (y - excavation.y) * rasterCell };
+    const localBox = boxFor(excavation, localView);
     paintStructure(target, game, localView, excavation, localBox, damp);
     entry = { canvas, bytes }; structureCache.set(key, entry);
     structureStats.bytes += bytes; structureStats.builds += 1;

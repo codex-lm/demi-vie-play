@@ -22,6 +22,12 @@ import { JOURNAL_PEOPLE_TEXT_FR, JOURNAL_PEOPLE_TEXT_EN } from './journalPeople.
 import { VEILLEE_TEXT_FR, VEILLEE_TEXT_EN } from './veilleeText.js';
 
 export const STR_EN = Object.freeze({
+  undoDig: 'Undo last dig',
+  undoDigHelp: 'Stop the latest unfinished dig: {kind} ({x}, {y}). Already dug ground stays open. Ctrl+Z / ⌘Z.',
+  undoDigEmpty: 'No unfinished dig to undo.',
+  undoDigUnavailable: 'That dig is no longer in progress.',
+  undoDigDone: 'Dig order cancelled.',
+  undoDigPartial: 'Digging stopped. The excavated part remains as a quarry.',
   ...VEILLEE_TEXT_EN,
   demiesTitle: 'Half-lives',
   demiesNextHours: 'Half-life {number} in {count} h',
@@ -97,6 +103,12 @@ export const STR_EN = Object.freeze({
 });
 
 export const STR = Object.freeze({
+  undoDig: 'Annuler le dernier creusage',
+  undoDigHelp: 'Arrêter le dernier creusage en cours : {kind} ({x}, {y}). Les cases déjà creusées restent ouvertes. Ctrl+Z / ⌘Z.',
+  undoDigEmpty: 'Aucun creusage en cours à annuler.',
+  undoDigUnavailable: 'Ce creusage n’est plus en cours.',
+  undoDigDone: 'Ordre de creusage annulé.',
+  undoDigPartial: 'Creusage arrêté. La partie déjà creusée reste une carrière.',
   ...VEILLEE_TEXT_FR,
   outsideTitle: 'Ce qui est resté dehors',
   outsideIntro: 'Nous avons fermé trop vite. Voici ce qui attend encore là-haut.',

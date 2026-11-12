@@ -9,8 +9,6 @@ const MAX_CACHE_BYTES = 96 * 1024 * 1024;
 const CACHE_REACH = 9;
 const caches = new WeakMap();
 const tiers = new Map();
-let worker;
-let pending;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function hash(x, y, salt = 0) {
@@ -214,7 +212,7 @@ function* paintRockFields(ctx, fogCtx, world, chunkX, chunkY, seed, pixels, CELL
   ctx.putImageData(image, 0, 0);fogCtx.putImageData(hidden, 0, 0);
 }
 
-export function* buildChunk(world, chunkX, chunkY, seed, CELL_PIXELS, CHUNK_SIZE) {
+function* buildChunk(world, chunkX, chunkY, seed, CELL_PIXELS, CHUNK_SIZE) {
   const tierKey = seed + ':' + CELL_PIXELS;
   let tier = tiers.get(tierKey);
   if (!tier) {
@@ -331,7 +329,7 @@ function storeChunk(cache, key, entry) {
   const older = cache.chunks.get(key);
   if (older) {
     cache.bytes -= older.canvas.width * older.canvas.height * 4;
-    older.canvas.close?.();
+    older.canvas.width = 0;
     cache.chunks.delete(key);
   }
   cache.chunks.set(key, entry);
@@ -382,70 +380,34 @@ function changedPatch(entry, signature, world, cx, cy, size) {
   return entry.patch;
 }
 
-function disableWorker() {
-  worker?.terminate();
-  worker = null;
-  pending = null;
-}
-
-function terrainWorker() {
-  if (worker !== undefined) return worker;
-  worker = null;
-  if (typeof Worker !== 'function' || typeof OffscreenCanvas !== 'function'
-    || typeof OffscreenCanvas.prototype.transferToImageBitmap !== 'function') return null;
-  try {
-    worker = new Worker(new URL('./terrain-worker.js', import.meta.url), { type: 'module' });
-    worker.onerror = disableWorker;
-    worker.onmessageerror = disableWorker;
-    worker.onmessage = ({ data: bitmap }) => {
-      const { cache, key, position, resolution, signature, record } = pending;
-      pending = null;
-      if (cache.wanted.has(key)) {
-        storeChunk(cache, key, { canvas: bitmap, signature, resolution, position, record });
-      } else bitmap.close();
-    };
-  } catch { disableWorker(); } // Portals may disallow workers in an embedded game.
-  return worker;
-}
-
-// Keep at most one job outstanding. After a pan or a zoom, the next frame
-// requests what is visible now, without waiting for an abandoned work queue.
+// Spend a small part of each frame painting the detailed rock. After a pan or
+// zoom only the work still visible is continued.
 function refine(cache, jobs, world, seed, chunkSize) {
   if (!jobs.length) { cache.local = null; return; }
-  if (pending) return;
   // Round-robin over missing visible chunks. A busy mine cannot starve its
   // neighbours, even if its inputs change faster than a bitmap can finish.
   const job = jobs.find(j => j.key === cache.local?.key)
     ?? jobs.find(j => j.order > (cache.lastOrder ?? -1)) ?? jobs[0];
   const { key, position, resolution, signature, x, y } = job;
   cache.lastOrder = job.order;
-  if (!terrainWorker()) {
-    // Keep a consistent input throughout sliced work. A later local change
-    // can be patched over the result while the next version is prepared.
-    if (cache.local?.key !== key) {
-      const copy = Object.create(Object.getPrototypeOf(world));
-      copy.width = world.width;
-      copy.height = world.height;
-      for (const field of ['materials', 'deposits', 'states', 'cellExcavation', 'visibility']) copy[field] = world[field].slice();
-      cache.local = { key, signature, record: chunkRecord(world, x, y, chunkSize),
-        steps: buildChunk(copy, x, y, seed, resolution, chunkSize) };
-    }
-    const deadline = performance.now() + 2;
-    let step;
-    do { step = cache.local.steps.next(); } while (!step.done && performance.now() < deadline);
-    if (step.done) {
-      storeChunk(cache, key, { canvas: step.value, signature: cache.local.signature,
-        resolution, position, record: cache.local.record });
-      cache.local = null;
-    }
-    return;
+  // Keep a consistent input throughout sliced work. A later local change
+  // can be patched over the result while the next version is prepared.
+  if (cache.local?.key !== key) {
+    const copy = Object.create(Object.getPrototypeOf(world));
+    copy.width = world.width;
+    copy.height = world.height;
+    for (const field of ['materials', 'deposits', 'states', 'cellExcavation', 'visibility']) copy[field] = world[field].slice();
+    cache.local = { key, signature, record: chunkRecord(world, x, y, chunkSize),
+      steps: buildChunk(copy, x, y, seed, resolution, chunkSize) };
   }
-  pending = { cache, key, position, resolution, signature, record: chunkRecord(world, x, y, chunkSize) };
-  const { width, height, materials, deposits, states, cellExcavation, visibility } = world;
-  try {
-    worker.postMessage({ world: { width, height, materials, deposits, states, cellExcavation, visibility },
-      seed, x, y, resolution, chunkSize });
-  } catch { disableWorker(); }
+  const deadline = performance.now() + 2;
+  let step;
+  do { step = cache.local.steps.next(); } while (!step.done && performance.now() < deadline);
+  if (step.done) {
+    storeChunk(cache, key, { canvas: step.value, signature: cache.local.signature,
+      resolution, position, record: cache.local.record });
+    cache.local = null;
+  }
 }
 
 export function drawTerrain(ctx, game, view) {
@@ -453,7 +415,7 @@ export function drawTerrain(ctx, game, view) {
   if (!world || view.cellSize <= 0) return;
   let cache = caches.get(world);
   if (!cache) {
-    cache = { chunks: new Map(), wanted: new Map(), bytes: 0 };
+    cache = { chunks: new Map(), bytes: 0 };
     caches.set(world, cache);
   }
   const ratio = Math.max(1, globalThis.devicePixelRatio || 1);
@@ -472,7 +434,6 @@ export function drawTerrain(ctx, game, view) {
   // A high-DPI viewport can need more than the normal LRU budget. Keep all
   // visible chunks resident: evicting one mid-frame would rebuild it forever.
   const visibleKeys = new Set();
-  cache.wanted.clear();
   const jobs = [];
   ctx.save();
   const camera = game.camera;
@@ -489,7 +450,6 @@ export function drawTerrain(ctx, game, view) {
       const position = CHUNK_SIZE + '/' + x + ',' + y;
       const key = resolution + ':' + position;
       const signature = chunkSignature(world, x, y, CHUNK_SIZE);
-      cache.wanted.set(key, signature);
       visibleKeys.add(key);
       let entry = cache.chunks.get(key);
       if (!entry || entry.signature !== signature) {
@@ -550,7 +510,7 @@ export function drawTerrain(ctx, game, view) {
     if (cache.bytes <= MAX_CACHE_BYTES) break;
     if (visibleKeys.has(key)) continue;
     cache.bytes -= entry.canvas.width * entry.canvas.height * 4;
-    entry.canvas.close?.();
+    entry.canvas.width = 0;
     cache.chunks.delete(key);
   }
   ctx.restore();

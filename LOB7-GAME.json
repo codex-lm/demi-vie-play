@@ -15,6 +15,7 @@
   ],
   "controls": [
     "Left-click or tap to select, click and drag to mark out excavations",
+    "Use Undo last dig, Ctrl+Z or Command+Z to stop the latest unfinished excavation",
     "Mouse wheel, trackpad pinch, or two fingers to zoom; one finger drags the map",
     "WASD, ZQSD, or arrow keys to move the camera",
     "Space to pause or resume, 1–5 to change speed: Live, Work, Watch, Hurry, Rush",

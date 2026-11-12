@@ -1,4 +1,4 @@
-import { createGame } from './gameRuntime.js';
+import { Game } from './game.js';
 import { applyGameLanguage, applyTheme, loadLanguage, loadM6Options, M6Shell } from './ui/m6Shell.js';
 import { DEFAULT_SPEED, speedFromRequest } from './data/speeds.js';
 
@@ -7,7 +7,7 @@ applyTheme(loadM6Options().theme);
 const params = new URLSearchParams(location.search);
 const seed = Number.parseInt(params.get('seed') ?? '1', 10) || 1;
 const speed = speedFromRequest(Number.parseInt(params.get('speed') ?? String(DEFAULT_SPEED), 10));
-const game = await createGame({
+const game = new Game({
   canvas: document.querySelector('#game-canvas'),
   seed,
   speed,

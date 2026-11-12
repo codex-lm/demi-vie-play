@@ -210,7 +210,7 @@ export function makeStrataTextures(cellPx,seed=1) {
   return step.value;
 }
 
-// The main thread can yield between scanlines when a portal blocks workers.
+// The game yields between scanlines so the camera and input stay responsive.
 export function* strataTextureSteps(cellPx,seed=1) {
   const cell=Math.max(.25,finite(cellPx,20)),salt=finite(seed,1)|0,key=`${cell}:${salt}`;
   if(textureCache.has(key))return textureCache.get(key);
